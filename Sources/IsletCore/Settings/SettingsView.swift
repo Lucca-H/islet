@@ -122,7 +122,7 @@ private struct AudioVisualizerSettingsRow: View {
                 if enabled, !engine.isAuthorized { engine.requestAccess() }
             }
 
-        Text("Replaces the collapsed notch's audio bars with a live frequency visualizer of whatever's actually playing, instead of a decorative animation. Requires granting **Screen & System Audio Recording** — the same permission Zoom or OBS use — even though only the audio channel is ever read. While it's active, macOS shows its standard screen-recording indicator.")
+        Text("Replaces the collapsed notch's audio bars with a live frequency visualizer of whatever's actually playing, instead of a decorative animation. This is also the only way Islet can tell that **browser audio** is playing, since Now Playing can't see browsers.\n\nRequires granting **Screen & System Audio Recording** — the same permission Zoom or OBS use — even though only the audio channel is ever read. macOS keeps its screen-recording indicator up for as long as this is switched on.")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -147,8 +147,10 @@ private struct AudioVisualizerSettingsRow: View {
     }
 
     private var statusText: String {
-        if engine.isCapturing { return "Capturing live audio" }
-        if engine.isAuthorized { return "Authorized — will start once something plays" }
+        if engine.isCapturing {
+            return engine.hasSignal ? "Capturing — audio detected" : "Capturing — no audio right now"
+        }
+        if engine.isAuthorized { return "Authorized — starting…" }
         return "Not authorized yet"
     }
 }

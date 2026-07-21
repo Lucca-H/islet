@@ -30,6 +30,17 @@ struct NotchGeometry {
     /// The collapsed pill's rendered width — the true cutout plus a safe margin on
     /// each side, so collapsed-state content never lands inside the dead zone.
     var collapsedContentWidth: CGFloat { notchWidth + contentSafeMargin * 2 }
+
+    /// Vertical inset that pushes expanded/peek content clear of the notch band.
+    ///
+    /// The collapsed pill dodges the cutout *horizontally* (`contentSafeMargin`),
+    /// which works because the pixels flanking the camera housing are real for the
+    /// full height of the menu bar. Wider surfaces can't use that trick: an expanded
+    /// panel is far wider than the notch and centered on it, so its top-center region
+    /// lands squarely behind the housing. Anything drawn in the first `notchHeight`
+    /// points — the tab strip, most obviously — is invisible on real hardware.
+    /// Expanded and peek content therefore starts *below* the band entirely.
+    var contentTopInset: CGFloat { hasPhysicalNotch ? notchHeight : 0 }
 }
 
 enum ScreenNotch {

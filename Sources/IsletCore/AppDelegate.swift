@@ -135,10 +135,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         updateAudioVisualizerState()
     }
 
+    /// Deliberately *not* gated on `nowPlaying.info?.isPlaying`.
+    ///
+    /// That gate looked reasonable but was backwards: `NowPlayingManager` only ever
+    /// resolves Music/Spotify, so anything playing in a browser left the visualizer
+    /// switched off — even though ScreenCaptureKit captures all system audio and is
+    /// the one mechanism that *can* see browser audio. Gating the capable feature
+    /// behind the incapable one meant web audio showed nothing at all.
+    ///
+    /// The cost of running whenever enabled is that macOS keeps its screen-recording
+    /// indicator up for as long as the toggle is on; that's disclosed in Settings.
     private func updateAudioVisualizerState() {
-        let shouldRun = settings.audioVisualizerEnabled
-            && settings.nowPlayingEnabled
-            && (nowPlaying.info?.isPlaying ?? false)
+        let shouldRun = settings.audioVisualizerEnabled && settings.nowPlayingEnabled
         if shouldRun {
             audioVisualizer.start()
         } else {

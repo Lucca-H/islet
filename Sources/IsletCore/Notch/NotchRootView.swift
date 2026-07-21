@@ -35,9 +35,14 @@ struct NotchRootView: View {
                height: geometry.notchHeight + CGFloat(settings.closedHeightBoost))
     }
 
+    /// Peek grows *downward* past the notch band so its row of text is never behind
+    /// the camera housing — the same reason the expanded panel insets its content.
+    /// On notchless displays `contentTopInset` is 0, so the pill stays compact.
     private var peekSize: CGSize {
         let width = min(CGFloat(settings.expandedWidth), collapsedSize.width + 260)
-        return CGSize(width: width, height: geometry.notchHeight + CGFloat(settings.closedHeightBoost))
+        return CGSize(width: width,
+                      height: geometry.contentTopInset + geometry.notchHeight
+                              + CGFloat(settings.closedHeightBoost))
     }
 
     private var expandedSize: CGSize {
@@ -131,12 +136,16 @@ struct NotchRootView: View {
             ExpandedNotchView()
                 .environmentObject(vm)
                 .environmentObject(settings)
+                // Keeps the tab strip (and everything under it) clear of the notch
+                // band, which is otherwise dead pixels behind the camera housing.
+                .padding(.top, geometry.contentTopInset)
                 .frame(width: currentSize.width, height: currentSize.height)
                 .clipped()
                 .transition(.opacity)
         case .peek:
             if let peek = vm.peek {
                 PeekContentView(peek: peek)
+                    .padding(.top, geometry.contentTopInset)
                     .frame(width: currentSize.width, height: currentSize.height)
                     .clipped()
                     .transition(.opacity)
@@ -159,13 +168,21 @@ private struct CollapsedNotchView: View {
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
 
-    private var isPlaying: Bool {
+    /// True when we have actual track metadata (Music/Spotify).
+    private var hasTrack: Bool {
         settings.nowPlayingEnabled && (vm.nowPlaying.info?.isPlaying ?? false)
+    }
+
+    /// True when *something* is audibly playing — including browser audio, which
+    /// only the visualizer can detect. Drives the bars, so web audio still shows
+    /// signs of life even though no metadata is available for it.
+    private var isPlaying: Bool {
+        hasTrack || (settings.nowPlayingEnabled && vm.audioVisualizer.hasSignal)
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            if settings.peekMediaArt, isPlaying {
+            if settings.peekMediaArt, hasTrack {
                 artwork
                     .frame(width: notchSize.height * 0.62, height: notchSize.height * 0.62)
                     .clipShape(RoundedRectangle(cornerRadius: 5))

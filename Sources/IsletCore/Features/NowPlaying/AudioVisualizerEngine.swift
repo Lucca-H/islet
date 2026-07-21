@@ -24,6 +24,19 @@ final class AudioVisualizerEngine: ObservableObject {
     @Published private(set) var bars: [CGFloat] = Array(repeating: 0, count: bandCount)
     @Published private(set) var isCapturing = false
 
+    /// Whether real audio is currently coming through, with a short hold so brief
+    /// gaps between tracks (or quiet passages) don't make the bars flicker away.
+    ///
+    /// This is the *only* way Islet can tell that browser/web audio is playing —
+    /// `NowPlayingManager` structurally can't see browsers, but ScreenCaptureKit
+    /// captures whatever is actually making sound.
+    @Published private(set) var hasSignal = false
+
+    private static let signalThreshold: CGFloat = 0.02
+    private static let signalHold: TimeInterval = 1.5
+    private var lastSignalAt: Date?
+    private var signalTimer: Timer?
+
     nonisolated static let bandCount = 4
     /// One instance app-wide: Settings shows live status (authorized? capturing?)
     /// from the exact same engine the notch is actually using, not a lookalike.
@@ -56,8 +69,16 @@ final class AudioVisualizerEngine: ObservableObject {
         isStarting = true
 
         output.onBands = { [weak self] bands in
-            Task { @MainActor in self?.bars = bands }
+            Task { @MainActor in self?.applyBands(bands) }
         }
+
+        // Expires `hasSignal` once audio actually stops; the sample callback can
+        // only ever tell us sound *is* present, never that it went away.
+        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.expireSignalIfStale() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        signalTimer = timer
 
         Task {
             do {
@@ -99,7 +120,26 @@ final class AudioVisualizerEngine: ObservableObject {
         isCapturing = false
         isStarting = false
         bars = Array(repeating: 0, count: Self.bandCount)
+        hasSignal = false
+        lastSignalAt = nil
+        signalTimer?.invalidate()
+        signalTimer = nil
         Task { try? await toStop?.stopCapture() }
+    }
+
+    private func applyBands(_ bands: [CGFloat]) {
+        bars = bands
+        if (bands.max() ?? 0) > Self.signalThreshold {
+            lastSignalAt = Date()
+            if !hasSignal { hasSignal = true }
+        }
+    }
+
+    private func expireSignalIfStale() {
+        guard hasSignal, let last = lastSignalAt else { return }
+        if Date().timeIntervalSince(last) > Self.signalHold {
+            hasSignal = false
+        }
     }
 }
 

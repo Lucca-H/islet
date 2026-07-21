@@ -138,11 +138,22 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     #expect(physical.contentSafeMargin > 0)
 }
 
+/// Regression guard: the expanded panel is far wider than the notch and centered on
+/// it, so its top-center region lands behind the camera housing. Content has to start
+/// below the band, or the tab strip is invisible on real hardware.
+@Test func expandedContentIsInsetBelowTheNotchBand() {
+    let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                 notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                 hasPhysicalNotch: true)
+    #expect(physical.contentTopInset == physical.notchHeight)
+}
+
 @Test func noExtraMarginOnNotchlessDisplays() {
     let virtual = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
                                 notchRect: CGRect(x: 0, y: 0, width: 220, height: 32),
                                 hasPhysicalNotch: false)
     #expect(virtual.collapsedContentWidth == virtual.notchWidth)
+    #expect(virtual.contentTopInset == 0)
 }
 
 // MARK: QuickNoteManager

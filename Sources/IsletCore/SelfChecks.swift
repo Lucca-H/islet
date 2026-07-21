@@ -29,12 +29,19 @@ public func runIsletSelfChecks() -> Int {
         check(physical.collapsedContentWidth > physical.notchWidth,
               "collapsed pill is wider than the true notch cutout on real hardware")
         check(physical.contentSafeMargin > 0, "real hardware gets a nonzero content margin")
+        // Regression guard: the expanded panel is far wider than the notch and
+        // centered on it, so its top-center lands behind the camera housing. Content
+        // must start below the band or the tab strip is invisible on real hardware.
+        check(physical.contentTopInset == physical.notchHeight,
+              "expanded/peek content is inset below the notch band on real hardware")
 
         let virtual = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
                                     notchRect: CGRect(x: 0, y: 0, width: 220, height: 32),
                                     hasPhysicalNotch: false)
         check(virtual.collapsedContentWidth == virtual.notchWidth,
               "no extra margin on notchless (virtual) displays — already real pixels")
+        check(virtual.contentTopInset == 0,
+              "no top inset on notchless displays — nothing to dodge")
     }
 
     print("NotchShape")

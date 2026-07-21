@@ -6,6 +6,29 @@ All notable changes to Islet are documented here. This project follows
 ## [0.1.0-beta.3] — 2026-07-21
 
 ### Fixed
+- **The expanded panel's tab strip rendered inside the notch band**, putting it behind
+  the camera housing on real hardware. The panel is sized `notchHeight + expandedHeight`
+  and its doc comment claimed the tab strip was "pinned under the notch" — but no top
+  inset was ever applied, so content started at y=0, i.e. inside the band. Because the
+  expanded panel is far wider than the notch and centered on it, its top-center region
+  lands squarely behind the housing; the collapsed pill's horizontal-margin trick can't
+  help a surface that wide. `NotchGeometry.contentTopInset` now pushes expanded *and*
+  peek content below the band entirely (0 on notchless displays, which have nothing to
+  dodge).
+- **The audio visualizer never ran for browser audio — the one case it was uniquely able
+  to handle.** It was gated on `nowPlaying.info?.isPlaying`, which only ever becomes true
+  for Music/Spotify, so anything playing in a browser kept it switched off even with
+  permission granted. ScreenCaptureKit captures *all* system audio, so the capable
+  feature was being disabled by the one that structurally can't see browsers. The
+  visualizer now runs whenever it's enabled and authorized, and the collapsed notch shows
+  its bars on real audio signal (`AudioVisualizerEngine.hasSignal`) even when no track
+  metadata exists — which is the only sign of life Islet can offer for web audio.
+- **Quick Note's placeholder didn't line up with the text cursor.** `TextEditor` applies
+  its own `textContainerInset` and `lineFragmentPadding` whose values aren't publicly
+  specified, so the overlaid placeholder was positioned with hand-guessed padding that
+  couldn't match. Replaced with `PlainTextView` (an `NSTextView` with both insets zeroed),
+  letting placeholder and text share one origin by construction. The placeholder now also
+  disappears as soon as the field is focused, rather than only once text exists.
 - **Collapsed-state content was invisible, hidden behind the physical camera housing.**
   The collapsed pill was sized to exactly match the notch's true pixel cutout
   (`NotchGeometry.notchWidth`) — but that cutout has zero real, displayable pixels, so
@@ -32,6 +55,16 @@ All notable changes to Islet are documented here. This project follows
 - **Outside-click dismiss.** Clicking away from an open notch now consumes that click
   instead of passing it through to whatever's underneath, via a transparent
   screen-spanning shield window that only goes up while the notch is actually expanded.
+- **`swift run IsletProbe --visualizer`** — prints live frequency-band levels once a
+  second, for confirming the visualizer against actually-playing audio.
+
+### Known limitations
+- **Granting Screen Recording doesn't survive a rebuild.** Islet is ad-hoc signed, so its
+  code hash changes every time it's rebuilt, and macOS keys the permission to that hash —
+  a grant given to one build won't apply to the next one. If the visualizer stops working
+  after rebuilding, re-grant it in System Settings → Privacy & Security → Screen & System
+  Audio Recording (removing the stale Islet entry first, if present). A stable Developer
+  ID signature would fix this permanently and is already on the roadmap.
 
 [0.1.0-beta.3]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.3
 

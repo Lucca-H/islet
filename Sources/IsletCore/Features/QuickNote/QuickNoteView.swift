@@ -1,8 +1,21 @@
 import SwiftUI
+import AppKit
 
 /// Expanded Quick Note panel: one plain text scratchpad, autosaved as you type.
 struct QuickNoteView: View {
     @EnvironmentObject var vm: NotchViewModel
+    @State private var isFocused = false
+
+    private static let fontSize: CGFloat = 13
+
+    /// The same typeface in both AppKit and SwiftUI terms, so the placeholder and
+    /// the real text share identical metrics as well as an identical origin.
+    private static var editorFont: NSFont {
+        let base = NSFont.systemFont(ofSize: fontSize)
+        guard let descriptor = base.fontDescriptor.withDesign(.rounded),
+              let rounded = NSFont(descriptor: descriptor, size: fontSize) else { return base }
+        return rounded
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -11,21 +24,21 @@ struct QuickNoteView: View {
         }
     }
 
+    /// Placeholder and text view are both top-leading in the same `ZStack` with no
+    /// padding of their own, and `PlainTextView` zeroes its insets — so they render
+    /// from the exact same origin rather than from hand-matched padding.
     private var editor: some View {
         ZStack(alignment: .topLeading) {
-            if vm.quickNote.text.isEmpty {
+            if vm.quickNote.text.isEmpty && !isFocused {
                 Text("Jot something down…")
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.system(size: Self.fontSize, design: .rounded))
                     .foregroundStyle(.white.opacity(0.3))
-                    .padding(.top, 8)
-                    .padding(.leading, 5)
                     .allowsHitTesting(false)
             }
-            TextEditor(text: noteBinding)
-                .font(.system(size: 13, design: .rounded))
-                .foregroundStyle(.white.opacity(0.9))
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
+            PlainTextView(text: noteBinding,
+                          isFocused: $isFocused,
+                          font: Self.editorFont,
+                          textColor: NSColor.white.withAlphaComponent(0.9))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
