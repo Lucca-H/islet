@@ -30,7 +30,10 @@ Hover the notch and it expands into a real **Liquid Glass** panel with three tab
   permission prompt.
 - Album/cover art, title, artist, and source app, with
   **play / pause / next / previous** controls.
-- When collapsed, the notch peeks the album art and a live audio-bars indicator.
+- When collapsed, the notch peeks the album art and a live audio-bars indicator —
+  optionally a **real frequency visualizer** of whatever's actually playing (Settings →
+  Notch → Audio visualizer). Off by default: it requires granting Screen & System Audio
+  Recording permission, the heaviest ask anywhere in Islet, so it's opt-in only.
 
 > **Browser/web audio is not supported.** The only system-wide API for it
 > (`MediaRemote`) is gated to Apple-signed binaries on macOS 26 — verified directly:
@@ -48,6 +51,10 @@ Hover the notch and it expands into a real **Liquid Glass** panel with three tab
 - Click any entry to copy it back to the pasteboard.
 - Skips passwords and transient copies from password managers (configurable).
 
+### 📝 Quick Note
+A single persistent scratchpad — the same idea as macOS's own Quick Note — always one
+click away in the notch. Autosaves as you type.
+
 ### ✨ Live activities
 A subtle, brief widening of the collapsed pill — not a full expand — hints at background
 events: a track starting, a file landing on the shelf, something new on the clipboard.
@@ -59,6 +66,10 @@ bezel — Liquid Glass reveals itself only once you actually open it, rendered w
 AppKit's native `NSGlassEffectView` (macOS 26's real glass material). Buttons use the
 system `.glass` style and Settings has a custom glass slider. Prefer fully opaque
 instead? Settings → Notch → **Notch style** keeps it solid black in every state.
+
+The collapsed pill is deliberately a bit wider than the bare camera cutout — that gap
+has zero real, displayable pixels, so content drawn exactly within it (album art,
+audio bars) would be physically invisible, hidden behind the camera housing itself.
 
 ### ⚙️ Settings
 A full preferences window covering:

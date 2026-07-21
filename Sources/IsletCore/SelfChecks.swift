@@ -18,6 +18,25 @@ public func runIsletSelfChecks() -> Int {
         }
     }
 
+    print("NotchGeometry")
+    do {
+        // Regression guard: content drawn exactly within the true camera-cutout
+        // width is physically invisible (that region has no real pixels), so the
+        // collapsed pill must always be wider than the bare notch on real hardware.
+        let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                     notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                     hasPhysicalNotch: true)
+        check(physical.collapsedContentWidth > physical.notchWidth,
+              "collapsed pill is wider than the true notch cutout on real hardware")
+        check(physical.contentSafeMargin > 0, "real hardware gets a nonzero content margin")
+
+        let virtual = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                    notchRect: CGRect(x: 0, y: 0, width: 220, height: 32),
+                                    hasPhysicalNotch: false)
+        check(virtual.collapsedContentWidth == virtual.notchWidth,
+              "no extra margin on notchless (virtual) displays — already real pixels")
+    }
+
     print("NotchShape")
     do {
         let rect = CGRect(x: 0, y: 0, width: 400, height: 120)
@@ -64,6 +83,24 @@ public func runIsletSelfChecks() -> Int {
         }
     }
 
+    print("QuickNoteManager")
+    do {
+        let defaults = UserDefaults(suiteName: "com.dynamicisland.islet.selfchecks.quicknote")!
+        defaults.removePersistentDomain(forName: "com.dynamicisland.islet.selfchecks.quicknote")
+        let manager = QuickNoteManager(defaults: defaults)
+        check(manager.text.isEmpty, "starts empty with no prior saved note")
+        check(manager.lastEditedAt == nil, "no edit timestamp before any edit")
+        manager.text = "buy milk"
+        check(manager.lastEditedAt != nil, "editing sets a timestamp")
+        manager.clear()
+        check(manager.text.isEmpty, "clear empties the note")
+    }
+
+    print("NotchTab")
+    do {
+        check(NotchTab.allCases.contains(.quickNote), "Quick Note is a real tab")
+    }
+
     print("NotchPeek")
     do {
         let peek = NotchPeek.fileAdded(name: "report.pdf")
@@ -86,12 +123,24 @@ public func runIsletSelfChecks() -> Int {
         store.clipboardLimit = 5
         store.nowPlayingEnabled = false
         store.notchMaterial = .solid
+        store.audioVisualizerEnabled = true
+        store.quickNoteEnabled = false
         store.resetToDefaults()
         check(store.expandedWidth == 640, "reset restores expandedWidth")
         check(store.clipboardLimit == 50, "reset restores clipboardLimit")
         check(store.nowPlayingEnabled, "reset restores nowPlayingEnabled")
         check(store.notchMaterial == .liquidGlass, "reset restores notchMaterial")
+        check(store.quickNoteEnabled, "reset restores quickNoteEnabled")
         check(NotchMaterial.allCases.allSatisfy { NotchMaterial(rawValue: $0.rawValue) == $0 }, "NotchMaterial round-trips")
+        check(!store.audioVisualizerEnabled, "reset restores audioVisualizerEnabled to off (needs explicit opt-in)")
+    }
+
+    print("AudioVisualizerEngine")
+    do {
+        check(AudioVisualizerEngine.bandCount == 4, "bandCount matches the UI's expected bar count")
+        let engine = AudioVisualizerEngine.shared
+        check(engine.bars.count == AudioVisualizerEngine.bandCount, "starts with one level per band")
+        check(!engine.isCapturing, "not capturing until explicitly started")
     }
 
     print(failures == 0 ? "\nAll checks passed ✅" : "\n\(failures) check(s) failed ❌")

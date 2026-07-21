@@ -1,5 +1,6 @@
 import Testing
 import SwiftUI
+import AppKit
 @testable import IsletCore
 
 // MARK: NotchShape
@@ -99,15 +100,66 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     store.clipboardLimit = 5
     store.nowPlayingEnabled = false
     store.notchMaterial = .solid
+    store.audioVisualizerEnabled = true
+    store.quickNoteEnabled = false
     store.resetToDefaults()
     #expect(store.expandedWidth == 640)
     #expect(store.clipboardLimit == 50)
     #expect(store.nowPlayingEnabled == true)
     #expect(store.notchMaterial == .liquidGlass)
+    #expect(store.audioVisualizerEnabled == false)
+    #expect(store.quickNoteEnabled == true)
 }
 
 @Test func notchMaterialRawRoundTrip() {
     for material in NotchMaterial.allCases {
         #expect(NotchMaterial(rawValue: material.rawValue) == material)
     }
+}
+
+@MainActor
+@Test func audioVisualizerEngineDefaults() {
+    #expect(AudioVisualizerEngine.bandCount == 4)
+    let engine = AudioVisualizerEngine.shared
+    #expect(engine.bars.count == AudioVisualizerEngine.bandCount)
+    #expect(engine.isCapturing == false)
+}
+
+// MARK: NotchGeometry content-safe margin
+
+/// Regression guard: the physical notch cutout has zero real, displayable pixels.
+/// Content drawn exactly within its width is invisible, not merely cramped — the
+/// collapsed pill must always be wider than the bare cutout on real hardware.
+@Test func collapsedPillIsWiderThanTheBareNotchOnRealHardware() {
+    let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                 notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                 hasPhysicalNotch: true)
+    #expect(physical.collapsedContentWidth > physical.notchWidth)
+    #expect(physical.contentSafeMargin > 0)
+}
+
+@Test func noExtraMarginOnNotchlessDisplays() {
+    let virtual = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                notchRect: CGRect(x: 0, y: 0, width: 220, height: 32),
+                                hasPhysicalNotch: false)
+    #expect(virtual.collapsedContentWidth == virtual.notchWidth)
+}
+
+// MARK: QuickNoteManager
+
+@MainActor
+@Test func quickNoteManagerPersistsAndClears() {
+    let defaults = UserDefaults(suiteName: "com.dynamicisland.islet.tests.quicknote")!
+    defaults.removePersistentDomain(forName: "com.dynamicisland.islet.tests.quicknote")
+    let manager = QuickNoteManager(defaults: defaults)
+    #expect(manager.text.isEmpty)
+    #expect(manager.lastEditedAt == nil)
+    manager.text = "buy milk"
+    #expect(manager.lastEditedAt != nil)
+    manager.clear()
+    #expect(manager.text.isEmpty)
+}
+
+@Test func quickNoteIsARealTab() {
+    #expect(NotchTab.allCases.contains(.quickNote))
 }

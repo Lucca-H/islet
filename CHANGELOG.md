@@ -3,6 +3,38 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.0-beta.3] — 2026-07-21
+
+### Fixed
+- **Collapsed-state content was invisible, hidden behind the physical camera housing.**
+  The collapsed pill was sized to exactly match the notch's true pixel cutout
+  (`NotchGeometry.notchWidth`) — but that cutout has zero real, displayable pixels, so
+  anything drawn inside it (album art, audio bars) was physically unable to be seen. The
+  collapsed pill now extends a safe margin (`NotchGeometry.contentSafeMargin`, 36pt each
+  side on real hardware) beyond the bare cutout, landing content on the real pixels that
+  flank it — the same technique other notch utilities use, and why their pills read as a
+  bit wider than the bare camera bump. The hover hit-region was widened to match, so
+  hovering directly over the now-visible bars/artwork actually opens the notch.
+
+### Added
+- **Real audio visualizer (opt-in).** The collapsed notch's audio bars can now show a
+  genuine frequency-band visualization of whatever's actually playing, captured via
+  ScreenCaptureKit and reduced to 4 bands with a real-time FFT (Accelerate/vDSP). Off by
+  default: it requires granting **Screen & System Audio Recording** permission — the same
+  category Zoom/OBS use — materially heavier than anything else Islet asks for, so it's
+  gated behind its own Settings toggle rather than ever being assumed. Falls back to the
+  previous non-audio-reactive animation when off or not yet authorized, so the layout
+  never shifts based on whether it's enabled. While capturing, macOS shows its standard
+  screen-recording indicator — disclosed in the Settings toggle's own description.
+- **Quick Note.** A single persistent scratchpad, the same idea as macOS's own Quick
+  Note — always one click away, autosaves as you type, toggleable like every other
+  feature.
+- **Outside-click dismiss.** Clicking away from an open notch now consumes that click
+  instead of passing it through to whatever's underneath, via a transparent
+  screen-spanning shield window that only goes up while the notch is actually expanded.
+
+[0.1.0-beta.3]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.3
+
 ## [0.1.0-beta.2] — 2026-07-20
 
 ### Added
