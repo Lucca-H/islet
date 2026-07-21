@@ -10,6 +10,7 @@ struct MediaRemoteSnapshot {
     var isPlaying: Bool
     var artworkData: Data?
     var sourceName: String?
+    var sourceBundleID: String?
     var sourceIcon: NSImage?
 }
 
@@ -116,20 +117,22 @@ final class MediaRemoteBridge {
             guard let self, let getPID = self.getNowPlayingPID else {
                 completion(MediaRemoteSnapshot(title: title, artist: artist, album: album,
                                                isPlaying: rate > 0, artworkData: artwork,
-                                               sourceName: nil, sourceIcon: nil))
+                                               sourceName: nil, sourceBundleID: nil, sourceIcon: nil))
                 return
             }
             getPID(self.callbackQueue) { pid in
                 var sourceName: String?
+                var sourceBundleID: String?
                 var sourceIcon: NSImage?
                 if pid > 0, let app = NSRunningApplication(processIdentifier: pid) {
                     sourceName = app.localizedName
+                    sourceBundleID = app.bundleIdentifier
                     sourceIcon = app.icon
                 }
                 completion(MediaRemoteSnapshot(
                     title: title, artist: artist, album: album,
                     isPlaying: rate > 0, artworkData: artwork,
-                    sourceName: sourceName, sourceIcon: sourceIcon
+                    sourceName: sourceName, sourceBundleID: sourceBundleID, sourceIcon: sourceIcon
                 ))
             }
         }

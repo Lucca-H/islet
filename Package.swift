@@ -30,6 +30,11 @@ let package = Package(
             path: "Sources/IsletChecks"
         ),
         // Standard swift-testing suite; runs under `swift test` in CI (Xcode present).
+        .executableTarget(
+            name: "IsletProbe",
+            dependencies: ["IsletCore"],
+            path: "Sources/IsletProbe"
+        ),
         .testTarget(
             name: "IsletTests",
             dependencies: ["IsletCore"],

@@ -52,21 +52,50 @@ synthesizes a centered virtual handle on notchless displays.
 - **Peek** — the same `NotchShape`, briefly widened (`NotchViewModel.showPeek`), showing
   a small icon + one line of text. Auto-dismisses after ~2s; never fires while the notch
   is expanded or hovered.
-- **Expanded** — a plain rounded rectangle rendered through `GlassEffectView`, a SwiftUI
-  wrapper around AppKit's native `NSGlassEffectView` (macOS 26's real Liquid Glass
-  material). `NSGlassEffectView` only exposes a single uniform `cornerRadius` — it can't
-  mask to `NotchShape`'s asymmetric silhouette — so the expanded panel intentionally
-  switches to a plain rounded rect rather than trying to fake glass on the notch shape.
+- **Expanded** — a plain rounded rectangle backed by `GlassBackground`, a SwiftUI wrapper
+  around AppKit's native `NSGlassEffectView` (macOS 26's real Liquid Glass material).
+  `NSGlassEffectView` only exposes a single uniform `cornerRadius` — it can't mask to
+  `NotchShape`'s asymmetric silhouette — so the expanded panel intentionally switches to
+  a plain rounded rect rather than faking glass on the notch shape.
+
+Two rules keep the glass stable, both learned from it visibly breaking:
+
+- **Don't host SwiftUI inside `NSGlassEffectView.contentView`.** It manages its own
+  content layout, and swapping a hosted SwiftUI tree underneath it (changing notch tabs)
+  makes the effect drop out. `GlassBackground` renders glass *behind* ordinary SwiftUI
+  content instead, which looks identical for an opaque panel.
+- **Don't nest glass inside glass.** The selected tab chip originally used its own
+  `NSGlassEffectView`; moving that nested view between tabs killed the parent panel's
+  effect. It's now a plain translucent capsule.
 
 ## Features
 
-- **NowPlayingManager** reads system-wide playback through `MediaRemoteBridge`, a thin
-  `dlopen`/`dlsym` wrapper around the private `MediaRemote.framework` — the same feed
-  behind Control Center's Now Playing widget. This covers Music, Spotify, *and* browser
-  tabs playing web audio (anything using the Media Session API), plus real embedded
-  artwork bytes and the source app's name/icon (via `MRMediaRemoteGetNowPlayingApplicationPID`).
-  It registers for push notifications and polls as a light backup. Every symbol lookup is
-  optional — a missing symbol degrades to "nothing playing" rather than crashing.
+- **NowPlayingManager** is layered, because the obvious approach doesn't work:
+
+  1. **`MediaRemoteBridge` (attempted first, usually unavailable).** A `dlopen`/`dlsym`
+     wrapper around the private `MediaRemote.framework`. It *would* give system-wide
+     playback including browser/web audio — but on macOS 26 it only returns data to
+     Apple-signed binaries. Verified directly: identical code returns 30 populated keys
+     when run inside Apple's `swift-frontend`, and an empty dictionary from an
+     ad-hoc-signed `.app` bundle, at the same instant with the same track playing.
+     Neither entitlements nor bundling changes this. The bridge self-disables after
+     three empty replies so it costs nothing, and would light up automatically if a
+     build ever gains access.
+  2. **Distributed notifications (the real backbone).** Music and Spotify each post a
+     `DistributedNotificationCenter` notification on every playback change, carrying
+     `Name` / `Artist` / `Album` / `Player State` in `userInfo`. This needs no
+     entitlement and triggers no permission prompt, and it's push-based, so updates
+     are instant.
+  3. **AppleScript (gap-filler).** Notifications only fire on *change*, so AppleScript
+     reads state at launch, fetches artwork, and sends transport commands. These need
+     Automation permission; if the user declines, metadata still flows from step 2.
+
+  Because an AppleScript poll returns empty when Automation is denied, an empty poll
+  never clears state the notification feed recently supplied (`notificationTrustWindow`).
+
+  Two sharp edges worth knowing: AppleScript rejects short variable names like `st`
+  (parsed as the ordinal "1st"), and a `tell application "X"` block fails to *compile*
+  when X isn't installed — so scripts are only ever run for apps confirmed running.
 - **DropShelfManager** copies dropped files into `~/Library/Application Support/Islet/Shelf`
   and vends them back as draggable `NSItemProvider`s.
 - **ClipboardManager** polls `NSPasteboard.changeCount`, records text/images, de-duplicates,

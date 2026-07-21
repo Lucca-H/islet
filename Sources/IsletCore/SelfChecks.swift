@@ -38,16 +38,30 @@ public func runIsletSelfChecks() -> Int {
 
     print("NowPlayingInfo")
     do {
-        let a = NowPlayingInfo(title: "Song", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
-        let b = NowPlayingInfo(title: "Song", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
-        let c = NowPlayingInfo(title: "Other", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
-        check(a == b, "identical now-playing snapshots are equal")
-        check(a != c, "different titles are unequal")
+        func make(_ title: String) -> NowPlayingInfo {
+            NowPlayingInfo(title: title, artist: "Artist", album: "Album", isPlaying: true,
+                           sourceName: "Music", sourceBundleID: "com.apple.Music")
+        }
+        check(make("Song") == make("Song"), "identical now-playing snapshots are equal")
+        check(make("Song") != make("Other"), "different titles are unequal")
+        check(make("Song").trackKey != make("Other").trackKey, "track keys differ per track")
     }
 
-    print("MediaRemoteBridge")
+    print("MediaApp")
     do {
-        check(MediaRemoteBridge.shared.isAvailable, "MediaRemote framework symbols resolved")
+        check(MediaApp.music.bundleID == "com.apple.Music", "Music bundle id")
+        check(MediaApp.spotify.bundleID == "com.spotify.client", "Spotify bundle id")
+        check(MediaApp.music.notificationName.rawValue == "com.apple.iTunes.playerInfo",
+              "Music posts the iTunes playerInfo notification")
+        check(MediaApp.spotify.notificationName.rawValue == "com.spotify.client.PlaybackStateChanged",
+              "Spotify posts its PlaybackStateChanged notification")
+        // Regression guard: AppleScript parses short names like `st` as the ordinal
+        // "1st" and raises a syntax error, which silently broke all metadata queries.
+        for app in MediaApp.allCases {
+            let script = app.metadataScript(separator: "|")
+            check(script.contains("is running"), "\(app.rawValue) script guards on `is running` so it never launches the app")
+            check(!script.contains("set st to"), "\(app.rawValue) script avoids AppleScript-reserved short names")
+        }
     }
 
     print("NotchPeek")

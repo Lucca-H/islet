@@ -78,7 +78,7 @@ struct NowPlayingView: View {
             Text("Nothing playing")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.6))
-            Text("Play something in Music, Spotify, or your browser")
+            Text("Play something in Music or Spotify")
                 .font(.system(size: 11, design: .rounded))
                 .foregroundStyle(.white.opacity(0.35))
         }

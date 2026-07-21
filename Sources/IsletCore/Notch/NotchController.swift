@@ -109,6 +109,13 @@ final class NotchController {
         }
     }
 
+    /// Feed a global click location (bottom-left origin). Clicks away from an open
+    /// notch dismiss it immediately; clicks on it are left to the SwiftUI content.
+    func handleClick(at point: CGPoint) {
+        guard viewModel.isExpanded, !expandedRegion.contains(point) else { return }
+        viewModel.clickedOutside()
+    }
+
     func teardown() {
         cancellables.removeAll()
         window.orderOut(nil)

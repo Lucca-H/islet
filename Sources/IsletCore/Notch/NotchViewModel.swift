@@ -128,6 +128,16 @@ final class NotchViewModel: ObservableObject {
         if isExpanded { close() } else { open() }
     }
 
+    /// A click landed outside the open notch: collapse right away rather than
+    /// waiting out the hover close delay, which reads as lag when the user has
+    /// clearly moved on. A drag hovering the shelf still wins.
+    func clickedOutside() {
+        guard isExpanded, !isDropTargeted else { return }
+        closeWorkItem?.cancel()
+        isHovering = false
+        close()
+    }
+
     func dropTargetChanged(_ targeted: Bool) {
         isDropTargeted = targeted
         if targeted {

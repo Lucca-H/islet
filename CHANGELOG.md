@@ -6,14 +6,27 @@ All notable changes to Islet are documented here. This project follows
 ## [0.1.0-beta.2] — 2026-07-20
 
 ### Added
-- **Now Playing rewritten for system-wide detection.** Replaces AppleScript polling with
-  the private `MediaRemote` framework (the same feed behind Control Center's widget):
-  Apple Music, Spotify, and web audio playing in any browser tab (Safari, Chrome,
-  anything using the Media Session API), with real embedded album art and the source
-  app's name/icon.
+- **Now Playing rebuilt on distributed notifications.** Music and Spotify each broadcast
+  playback changes with full metadata, needing no entitlement and no permission prompt.
+  Push-based, so the notch updates instantly. AppleScript fills the gaps (launch state,
+  cover art, transport controls); metadata keeps flowing even if Automation is declined.
 - **Liquid Glass UI.** The expanded panel now renders through AppKit's native
   `NSGlassEffectView` (macOS 26's real glass material, bridged into SwiftUI), buttons use
   the system `.glass` style, and Settings has a bespoke glass-material slider.
+- **`IsletProbe`** — a diagnostic target (`swift run IsletProbe`) that prints what Now
+  Playing resolves once per second, for troubleshooting detection.
+
+### Fixed
+- Now Playing returned nothing at all. Three separate causes: AppleScript rejects the
+  variable name `st` (parsed as the ordinal "1st"), which broke every metadata query;
+  the backup poll wiped out good notification data whenever Automation was unavailable;
+  and `MediaRemote` — the intended source — turned out to be unavailable entirely (below).
+- Liquid Glass dropped out when switching notch tabs, caused by nesting an
+  `NSGlassEffectView` (the selected tab chip) inside the panel's own glass, and by
+  hosting SwiftUI content inside `NSGlassEffectView.contentView`. Glass is now a
+  background layer and the chip is a plain translucent capsule.
+- The Settings sliders' solid accent fill covered the glass track. The fill is now
+  translucent and the thumb is itself glass.
 - **Live activities.** A subtle, brief widening of the collapsed pill (not a full expand)
   hints at background events — a track starting, a file added to the shelf, a new
   clipboard capture — and never fires while the notch is already open or hovered.
@@ -25,10 +38,13 @@ All notable changes to Islet are documented here. This project follows
 - Now Playing no longer needs an Automation permission prompt.
 
 ### Known limitations
-- Now Playing and the glass panel both rely on undocumented, private system frameworks
-  (`MediaRemote.framework`, `NSGlassEffectView`). Widely used by similar menu-bar apps,
-  but Apple could change or restrict either in a future release; Now Playing degrades to
-  "nothing playing" rather than crashing if that happens.
+- **Browser/web audio is not supported.** The only system-wide API for it (`MediaRemote`)
+  is gated to Apple-signed binaries on macOS 26. Verified directly: identical code returns
+  30 populated keys from Apple's `swift-frontend` and an empty dictionary from an
+  ad-hoc-signed `.app`, at the same instant with the same track playing — and neither
+  entitlements nor proper bundling changes it. Islet still tries it first and will use it
+  automatically if a build ever gains access, then falls back to Music/Spotify.
+- Artwork and transport controls need Automation permission; track metadata does not.
 - Investigated mirroring real system notifications (any app, not just Islet's own
   events) via the classic `DistributedNotificationCenter` technique other notch utilities
   use — confirmed live that Apple no longer delivers a payload through it. The remaining

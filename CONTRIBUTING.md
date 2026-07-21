@@ -9,9 +9,13 @@ git clone https://github.com/OWNER/islet.git
 cd islet
 swift build
 swift run IsletChecks     # fast logic checks — no Xcode required
+swift run IsletProbe      # live Now Playing diagnostic (prints what it resolves)
 ./scripts/build_app.sh    # build a runnable Islet.app
 open build/Islet.app
 ```
+
+`IsletProbe` also accepts `--synthetic`, which injects a fake Music notification so the
+detection path can be exercised without anything actually playing.
 
 You need macOS 26 (Tahoe) or later and the Swift toolchain. Command Line Tools are sufficient for
 building and the self-checks; the full `swift test` suite needs Xcode.

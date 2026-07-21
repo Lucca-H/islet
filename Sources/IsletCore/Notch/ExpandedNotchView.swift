@@ -69,12 +69,16 @@ private struct TabChip: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
+            // Deliberately *not* a nested GlassEffectView: NSGlassEffectView only
+            // guarantees its own contentView, and nesting one inside the panel's
+            // glass makes the parent effect drop out when the selection moves.
             .background {
-                if isSelected {
-                    GlassEffectView(cornerRadius: 12, tint: Color.accentColor.opacity(0.35)) {
-                        Color.clear
-                    }
-                }
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(isSelected ? 0.18 : 0))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.white.opacity(isSelected ? 0.22 : 0), lineWidth: 0.5)
+                    )
             }
             .foregroundStyle(.white.opacity(isSelected ? 1 : 0.55))
         }

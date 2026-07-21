@@ -25,12 +25,18 @@
 Hover the notch and it expands into a real **Liquid Glass** panel with three tabs.
 
 ### 🎵 Now Playing
-- **System-wide** detection — Apple Music, Spotify, and web audio playing in a browser
-  tab (Safari, Chrome, anything using the Media Session API), via the same feed that
-  powers Control Center's Now Playing widget.
-- Real embedded album/cover art, title, artist, and source app, with
+- Detects playback from **Apple Music** and **Spotify** via each app's
+  `DistributedNotificationCenter` broadcast — push-based, instant, and requiring no
+  permission prompt.
+- Album/cover art, title, artist, and source app, with
   **play / pause / next / previous** controls.
 - When collapsed, the notch peeks the album art and a live audio-bars indicator.
+
+> **Browser/web audio is not supported.** The only system-wide API for it
+> (`MediaRemote`) is gated to Apple-signed binaries on macOS 26 — verified directly:
+> identical code returns full data from Apple's own `swift-frontend` and an empty
+> dictionary from an ad-hoc-signed app bundle. Islet still attempts it first and will
+> light up automatically if it ever becomes available, then falls back.
 
 ### 🗂 Drop Shelf
 - Drag any file onto the notch to stash it on a temporary shelf.
@@ -88,15 +94,19 @@ open build/Islet.app
 
 ## Permissions
 
-Now Playing needs no permission prompt — it reads the system's Now Playing feed the same
-way Control Center does. No Accessibility or Automation access is required.
+| Permission | Why | Needed for |
+|-----------|-----|-----------|
+| *(none)* | Track title, artist, album, and play state arrive via distributed notifications. | Core Now Playing |
+| **Automation** (Music / Spotify) | Reading state at launch, fetching cover art, and sending transport commands. | Artwork + controls |
 
-> **Note on private APIs.** Now Playing detection uses `MediaRemote.framework`, and the
-> expanded panel uses `NSGlassEffectView` — both are real system frameworks, loaded and
-> called normally, but `MediaRemote` is undocumented (not part of the public SDK). It's
-> the same mechanism many popular menu-bar Now Playing widgets rely on, and it degrades
-> gracefully (Now Playing just shows nothing) if a future macOS update changes it. See
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
+Islet keeps working if you decline Automation — you'll still get live track metadata from
+the notification feed, just without artwork or transport buttons.
+
+Troubleshoot detection with the built-in probe:
+
+```bash
+swift run IsletProbe        # prints what Now Playing resolves, once per second
+```
 
 ---
 

@@ -113,5 +113,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }) {
             mouseMonitors.append(local)
         }
+
+        // A click away from an open notch dismisses it immediately; without one,
+        // the hover close delay stays in charge.
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        let clickHandler: (NSEvent) -> Void = { [weak self] _ in
+            guard let self else { return }
+            let location = NSEvent.mouseLocation
+            for controller in self.controllers { controller.handleClick(at: location) }
+        }
+
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { clickHandler($0) }) {
+            mouseMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: clicks, handler: { event in
+            clickHandler(event); return event
+        }) {
+            mouseMonitors.append(local)
+        }
     }
 }

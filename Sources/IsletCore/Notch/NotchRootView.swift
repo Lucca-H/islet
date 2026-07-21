@@ -56,14 +56,14 @@ struct NotchRootView: View {
     private var notchBody: some View {
         Group {
             if visualState == .expanded {
-                GlassEffectView(cornerRadius: CGFloat(settings.cornerRadius),
-                                tint: Color.black.opacity(0.55)) {
-                    content
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: CGFloat(settings.cornerRadius), style: .continuous)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
+                content
+                    .glassPanel(cornerRadius: CGFloat(settings.cornerRadius),
+                                tint: Color.black.opacity(0.55))
+                    .clipShape(RoundedRectangle(cornerRadius: CGFloat(settings.cornerRadius), style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CGFloat(settings.cornerRadius), style: .continuous)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
             } else {
                 NotchShape(bottomRadius: CGFloat(settings.cornerRadius), topRadius: 8)
                     .fill(Color.black)

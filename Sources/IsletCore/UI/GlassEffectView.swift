@@ -2,34 +2,28 @@ import AppKit
 import SwiftUI
 
 /// Bridges AppKit's native `NSGlassEffectView` (macOS 26's real Liquid Glass
-/// material) into SwiftUI. `NSGlassEffectView` only supports a single uniform
-/// corner radius — it cannot mask to an arbitrary path — so this is used for
-/// the expanded notch panel (a plain rounded rectangle), not the collapsed
-/// pill's notch-hugging silhouette.
-struct GlassEffectView<Content: View>: NSViewRepresentable {
+/// material) into SwiftUI as a **background layer**.
+///
+/// Deliberately does not host SwiftUI content inside the glass view's
+/// `contentView`. `NSGlassEffectView` manages its own content layout, and swapping
+/// a hosted SwiftUI tree underneath it (e.g. changing notch tabs) makes the effect
+/// drop out. Rendering glass behind ordinary SwiftUI content is stable and looks
+/// identical for opaque panels.
+struct GlassBackground: NSViewRepresentable {
     var cornerRadius: CGFloat
     var tint: Color?
     var style: NSGlassEffectView.Style = .regular
-    @ViewBuilder var content: Content
 
     func makeNSView(context: Context) -> NSGlassEffectView {
         let glass = NSGlassEffectView()
-        let hosting = NSHostingView(rootView: content)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        glass.contentView = hosting
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: glass.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: glass.bottomAnchor)
-        ])
-        context.coordinator.hosting = hosting
+        // An empty content view guarantees the material renders even though we
+        // draw the real content above it in SwiftUI.
+        glass.contentView = NSView()
         apply(to: glass)
         return glass
     }
 
     func updateNSView(_ glass: NSGlassEffectView, context: Context) {
-        context.coordinator.hosting?.rootView = content
         apply(to: glass)
     }
 
@@ -38,10 +32,13 @@ struct GlassEffectView<Content: View>: NSViewRepresentable {
         glass.style = style
         glass.tintColor = tint.map(NSColor.init)
     }
+}
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    final class Coordinator {
-        var hosting: NSHostingView<Content>?
+extension View {
+    /// Render this view on top of a native Liquid Glass panel.
+    func glassPanel(cornerRadius: CGFloat,
+                    tint: Color? = nil,
+                    style: NSGlassEffectView.Style = .regular) -> some View {
+        background(GlassBackground(cornerRadius: cornerRadius, tint: tint, style: style))
     }
 }
