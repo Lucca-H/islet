@@ -70,9 +70,14 @@ final class NotchController {
     // MARK: - Pointer regions (screen coordinates)
 
     /// The area that opens the notch when the pointer enters it while collapsed.
+    /// Matches `NotchRootView.collapsedSize` — the visible pill is wider than the
+    /// bare notch cutout (see `NotchGeometry.contentSafeMargin`), so the hover
+    /// target has to be too, or hovering directly over the now-visible audio bars
+    /// or artwork thumbnail wouldn't register.
     var collapsedRegion: CGRect {
         let inset: CGFloat = 4
-        return geometry.notchRect.insetBy(dx: -inset, dy: 0)
+        return geometry.notchRect
+            .insetBy(dx: -(geometry.contentSafeMargin + inset), dy: 0)
     }
 
     /// The area that keeps the notch open; leaving it collapses the notch.

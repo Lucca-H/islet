@@ -12,6 +12,24 @@ struct NotchGeometry {
 
     var notchWidth: CGFloat { notchRect.width }
     var notchHeight: CGFloat { notchRect.height }
+
+    /// Extra width added to each side of the notch's exact pixel cutout when the
+    /// display has a real physical notch.
+    ///
+    /// `notchRect` is the true camera-housing gap — it has **zero real, displayable
+    /// pixels**. Content drawn exactly within that width (album art, audio bars) is
+    /// physically unable to be seen: those pixels don't exist. Real content has to
+    /// sit in the margin immediately flanking the cutout, which *is* real screen —
+    /// the same trick every other notch utility uses, and why their collapsed pill
+    /// always reads a bit wider than the bare camera bump.
+    ///
+    /// Shared by `NotchRootView` (what's drawn) and `NotchController` (what's
+    /// hoverable) so the visible pill and its hit region always agree.
+    var contentSafeMargin: CGFloat { hasPhysicalNotch ? 36 : 0 }
+
+    /// The collapsed pill's rendered width — the true cutout plus a safe margin on
+    /// each side, so collapsed-state content never lands inside the dead zone.
+    var collapsedContentWidth: CGFloat { notchWidth + contentSafeMargin * 2 }
 }
 
 enum ScreenNotch {
