@@ -64,7 +64,7 @@ All notable changes to Islet are documented here. This project follows
   fallback (reading Notification Center's on-disk database) requires Full Disk Access and
   exposes every app's notification content, so it was deliberately not implemented.
 
-[0.1.0-beta.2]: https://github.com/OWNER/islet/releases/tag/v0.1.0-beta.2
+[0.1.0-beta.2]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.2
 
 ## [0.1.0-beta.1] — 2026-07-20
 
@@ -94,4 +94,4 @@ First public beta. 🎉
   open, then drop. (Tracked for a future release.)
 - Requires macOS 14 or later.
 
-[0.1.0-beta.1]: https://github.com/OWNER/islet/releases/tag/v0.1.0-beta.1
+[0.1.0-beta.1]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.1

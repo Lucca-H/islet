@@ -6,8 +6,8 @@
 
 **Turn your Mac's notch into a live hub for media, files, and your clipboard.**
 
-[![CI](https://github.com/OWNER/islet/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/islet/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/OWNER/islet?include_prereleases&sort=semver)](https://github.com/OWNER/islet/releases)
+[![CI](https://github.com/Lucca-H/islet/actions/workflows/ci.yml/badge.svg)](https://github.com/Lucca-H/islet/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Lucca-H/islet?include_prereleases&sort=semver)](https://github.com/Lucca-H/islet/releases)
 ![Platform](https://img.shields.io/badge/macOS-26%2B-black?logo=apple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -74,7 +74,7 @@ A full preferences window covering:
 ## Install
 
 ### Download (recommended)
-1. Grab `Islet.app.zip` from the [latest release](https://github.com/OWNER/islet/releases).
+1. Grab `Islet.app.zip` from the [latest release](https://github.com/Lucca-H/islet/releases).
 2. Unzip and move **Islet.app** to `/Applications`.
 3. Because the beta is **ad-hoc signed (not notarized)**, right-click the app → **Open** the
    first time, or run:
@@ -86,7 +86,7 @@ A full preferences window covering:
 ### Build from source
 Requires macOS 26 (Tahoe) or later, and either Xcode or the Swift toolchain (Command Line Tools are enough).
 ```bash
-git clone https://github.com/OWNER/islet.git
+git clone https://github.com/Lucca-H/islet.git
 cd islet
 ./scripts/build_app.sh release
 open build/Islet.app

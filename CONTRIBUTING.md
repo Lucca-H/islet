@@ -5,7 +5,7 @@ Thanks for your interest! Islet is a young beta, so there's plenty to do.
 ## Getting started
 
 ```bash
-git clone https://github.com/OWNER/islet.git
+git clone https://github.com/Lucca-H/islet.git
 cd islet
 swift build
 swift run IsletChecks     # fast logic checks — no Xcode required
