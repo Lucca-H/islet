@@ -1,11 +1,21 @@
 import SwiftUI
 
-/// The visible notch surface. Three visual states share one surface:
-/// - **Collapsed** — a black pill hugging the exact physical notch silhouette.
-/// - **Peek** — the same silhouette, briefly widened, for a subtle live-activity hint.
-/// - **Expanded** — a plain rounded rectangle rendered in real Liquid Glass
-///   (`NSGlassEffectView` only supports uniform corners, so the notch-hugging
-///   shoulder shape is reserved for the collapsed/peek states).
+/// The visible notch surface. Collapsed, the brief widened "peek", and expanded
+/// all render the **same material** — set once in Settings (`NotchMaterial`,
+/// Liquid Glass or Solid) — so nothing about the surface's color or transparency
+/// changes when it resizes. Only the geometry (`NotchShape`'s size and corner
+/// radius) animates.
+///
+/// Two earlier attempts got this wrong:
+/// - A structural `if/else` swapped between a solid fill (collapsed) and a
+///   completely different glass view tree (expanded). SwiftUI can't animate
+///   across two different view identities, so the glass tint popped in instantly.
+/// - Layering a permanent glass view on top of a permanent *opaque* black fill.
+///   `NSGlassEffectView` refracts whatever is drawn behind it — which was our own
+///   opaque black, not the desktop behind the window — so it read as solid black
+///   no matter what its own opacity was.
+///
+/// The fix: pick exactly one material and never layer a second, opaque one under it.
 struct NotchRootView: View {
     let geometry: NotchGeometry
 
@@ -52,25 +62,47 @@ struct NotchRootView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    /// Shared silhouette for the base fill, the glass clip, and the stroke overlay —
+    /// using one `Shape` value (rather than three separately-constructed ones) keeps
+    /// their corner-radius interpolation in lockstep during the expand animation.
+    private var shape: NotchShape {
+        NotchShape(bottomRadius: CGFloat(settings.cornerRadius), topRadius: vm.isExpanded ? 12 : 8)
+    }
+
+    /// The notch always reads as solid black while collapsed or peeking — matching
+    /// the physical hardware bezel it sits against — and only reveals Liquid Glass
+    /// once actually opened. In Solid mode this stays 1 always.
+    private var blackOpacity: Double {
+        settings.notchMaterial == .solid || !vm.isExpanded ? 1 : 0
+    }
+
     @ViewBuilder
     private var notchBody: some View {
-        Group {
-            if visualState == .expanded {
-                content
+        ZStack(alignment: .top) {
+            // Both layers are always present — never structurally inserted or
+            // removed — so only their opacity needs to animate. Fading the black
+            // out as the glass fades in (rather than switching between them) is
+            // what lets the glass end up genuinely transparent once fully open: a
+            // permanently-opaque layer behind it would refract itself, not the
+            // desktop, and read as solid regardless of its own opacity.
+            shape.fill(Color.black)
+                .opacity(blackOpacity)
+
+            if settings.notchMaterial == .liquidGlass {
+                shape
+                    .fill(Color.clear)
                     .glassPanel(cornerRadius: CGFloat(settings.cornerRadius),
-                                tint: Color.black.opacity(0.55))
-                    .clipShape(RoundedRectangle(cornerRadius: CGFloat(settings.cornerRadius), style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CGFloat(settings.cornerRadius), style: .continuous)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-            } else {
-                NotchShape(bottomRadius: CGFloat(settings.cornerRadius), topRadius: 8)
-                    .fill(Color.black)
-                    .overlay(content)
+                               tint: Color(white: 0.55, opacity: 0.22))
+                    .clipShape(shape)
+                    .opacity(vm.isExpanded ? 1 : 0)
             }
+
+            shape.stroke(Color.white.opacity(0.1), lineWidth: 1)
+
+            content
         }
         .frame(width: currentSize.width, height: currentSize.height)
+        .clipShape(shape)
         .contentShape(Rectangle())
         .shadow(color: .black.opacity(visualState == .expanded ? 0.45 : 0),
                 radius: visualState == .expanded ? 24 : 0, x: 0, y: 12)

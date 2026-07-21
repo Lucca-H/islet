@@ -86,6 +86,15 @@ private struct NotchSettings: View {
     @EnvironmentObject var settings: SettingsStore
     var body: some View {
         Form {
+            Picker("Notch style", selection: $settings.notchMaterial) {
+                ForEach(NotchMaterial.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(settings.notchMaterial == .liquidGlass
+                 ? "Translucent, refracts whatever is behind the notch. Requires macOS 26."
+                 : "Opaque, matching the physical notch bezel.")
+                .font(.footnote).foregroundStyle(.secondary)
+
             sliderRow("Expanded width", value: $settings.expandedWidth, range: 420...900, unit: "pt", step: 10)
             sliderRow("Expanded height", value: $settings.expandedHeight, range: 140...340, unit: "pt", step: 10)
             sliderRow("Corner radius", value: $settings.cornerRadius, range: 8...40, unit: "pt")

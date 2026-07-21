@@ -10,11 +10,18 @@ All notable changes to Islet are documented here. This project follows
   playback changes with full metadata, needing no entitlement and no permission prompt.
   Push-based, so the notch updates instantly. AppleScript fills the gaps (launch state,
   cover art, transport controls); metadata keeps flowing even if Automation is declined.
-- **Liquid Glass UI.** The expanded panel now renders through AppKit's native
-  `NSGlassEffectView` (macOS 26's real glass material, bridged into SwiftUI), buttons use
-  the system `.glass` style, and Settings has a bespoke glass-material slider.
+- **Liquid Glass UI.** The notch renders through AppKit's native `NSGlassEffectView`
+  (macOS 26's real glass material, bridged into SwiftUI) — the same material at every
+  size, never swapping color as it resizes. Buttons use the system `.glass` style and
+  Settings has a bespoke glass-material slider.
+- **Notch style setting.** Settings → Notch → Notch style switches the whole surface
+  between Liquid Glass and a solid opaque black, matching the physical bezel.
 - **`IsletProbe`** — a diagnostic target (`swift run IsletProbe`) that prints what Now
   Playing resolves once per second, for troubleshooting detection.
+- **Live activities.** A subtle, brief widening of the collapsed pill (not a full expand)
+  hints at background events — a track starting, a file added to the shelf, a new
+  clipboard capture — and never fires while the notch is already open or hovered.
+  Replaces the previous full-open pulse on track change.
 
 ### Fixed
 - Now Playing returned nothing at all. Three separate causes: AppleScript rejects the
@@ -25,12 +32,18 @@ All notable changes to Islet are documented here. This project follows
   `NSGlassEffectView` (the selected tab chip) inside the panel's own glass, and by
   hosting SwiftUI content inside `NSGlassEffectView.contentView`. Glass is now a
   background layer and the chip is a plain translucent capsule.
+- The notch's color visibly snapped darker on every expand, then — after a first
+  attempted fix — showed no transparency at all. Three compounding causes, in order
+  found: a structural swap between an opaque fill and a differently-shaped glass view
+  (which SwiftUI can't animate across); fixing that by leaving a permanent opaque black
+  layer sitting under a permanent glass layer, which made the glass refract its own
+  black instead of the desktop and read as solid regardless of its own opacity; and,
+  once real transparency was working, the collapsed pill needed to stay solid black
+  (matching the physical hardware bezel) rather than adopt the glass material too. The
+  black layer's opacity now genuinely reaches 0 only once actually expanded, fading out
+  as the glass fades in — both permanently-present views, only opacity animating.
 - The Settings sliders' solid accent fill covered the glass track. The fill is now
   translucent and the thumb is itself glass.
-- **Live activities.** A subtle, brief widening of the collapsed pill (not a full expand)
-  hints at background events — a track starting, a file added to the shelf, a new
-  clipboard capture — and never fires while the notch is already open or hovered.
-  Replaces the previous full-open pulse on track change.
 
 ### Changed
 - **Minimum macOS raised to 26 (Tahoe).** `NSGlassEffectView` doesn't exist before it;

@@ -34,6 +34,22 @@ enum ExpandTrigger: String, CaseIterable, Identifiable {
     }
 }
 
+/// The notch's surface material — kept identical across collapsed, peek, and
+/// expanded states, so nothing changes color when the notch resizes.
+enum NotchMaterial: String, CaseIterable, Identifiable {
+    case liquidGlass
+    case solid
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .liquidGlass: return "Liquid Glass"
+        case .solid:       return "Solid"
+        }
+    }
+}
+
 /// Central, observable, persisted configuration for the whole app.
 ///
 /// Every property mirrors a `UserDefaults` key so settings survive relaunches.
@@ -57,6 +73,7 @@ final class SettingsStore: ObservableObject {
     @Published var peekMediaArt: Bool      { didSet { persist(oldValue, peekMediaArt, "peekMediaArt") } }
 
     // MARK: Notch size / shape
+    @Published var notchMaterial: NotchMaterial { didSet { persistRaw(oldValue.rawValue, notchMaterial.rawValue, "notchMaterial") } }
     @Published var expandedWidth: Double   { didSet { persist(oldValue, expandedWidth, "expandedWidth") } }
     @Published var expandedHeight: Double  { didSet { persist(oldValue, expandedHeight, "expandedHeight") } }
     @Published var cornerRadius: Double    { didSet { persist(oldValue, cornerRadius, "cornerRadius") } }
@@ -94,6 +111,8 @@ final class SettingsStore: ObservableObject {
         hapticFeedback  = defaults.object(forKey: "hapticFeedback")  as? Bool ?? true
         peekMediaArt    = defaults.object(forKey: "peekMediaArt")    as? Bool ?? true
 
+        let material = defaults.string(forKey: "notchMaterial").flatMap(NotchMaterial.init) ?? .liquidGlass
+        notchMaterial = material
         expandedWidth   = defaults.object(forKey: "expandedWidth")   as? Double ?? 640
         expandedHeight  = defaults.object(forKey: "expandedHeight")  as? Double ?? 210
         cornerRadius    = defaults.object(forKey: "cornerRadius")    as? Double ?? 22
@@ -121,6 +140,7 @@ final class SettingsStore: ObservableObject {
         hoverCloseDelay = 0.35
         hapticFeedback = true
         peekMediaArt = true
+        notchMaterial = .liquidGlass
         expandedWidth = 640
         expandedHeight = 210
         cornerRadius = 22

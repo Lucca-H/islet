@@ -98,8 +98,16 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     store.expandedWidth = 800
     store.clipboardLimit = 5
     store.nowPlayingEnabled = false
+    store.notchMaterial = .solid
     store.resetToDefaults()
     #expect(store.expandedWidth == 640)
     #expect(store.clipboardLimit == 50)
     #expect(store.nowPlayingEnabled == true)
+    #expect(store.notchMaterial == .liquidGlass)
+}
+
+@Test func notchMaterialRawRoundTrip() {
+    for material in NotchMaterial.allCases {
+        #expect(NotchMaterial(rawValue: material.rawValue) == material)
+    }
 }

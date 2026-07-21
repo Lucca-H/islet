@@ -54,9 +54,11 @@ events: a track starting, a file landing on the shelf, something new on the clip
 Never fires while you're already looking at the notch.
 
 ### 🧊 Liquid Glass throughout
-The expanded panel is rendered with AppKit's native `NSGlassEffectView` (macOS 26's real
-glass material), buttons use the system `.glass` button style, and Settings has a
-custom glass slider — not an imitation blur.
+The collapsed notch always stays solid black, blending into the physical hardware
+bezel — Liquid Glass reveals itself only once you actually open it, rendered with
+AppKit's native `NSGlassEffectView` (macOS 26's real glass material). Buttons use the
+system `.glass` style and Settings has a custom glass slider. Prefer fully opaque
+instead? Settings → Notch → **Notch style** keeps it solid black in every state.
 
 ### ⚙️ Settings
 A full preferences window covering:

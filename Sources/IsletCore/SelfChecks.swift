@@ -85,10 +85,13 @@ public func runIsletSelfChecks() -> Int {
         store.expandedWidth = 800
         store.clipboardLimit = 5
         store.nowPlayingEnabled = false
+        store.notchMaterial = .solid
         store.resetToDefaults()
         check(store.expandedWidth == 640, "reset restores expandedWidth")
         check(store.clipboardLimit == 50, "reset restores clipboardLimit")
         check(store.nowPlayingEnabled, "reset restores nowPlayingEnabled")
+        check(store.notchMaterial == .liquidGlass, "reset restores notchMaterial")
+        check(NotchMaterial.allCases.allSatisfy { NotchMaterial(rawValue: $0.rawValue) == $0 }, "NotchMaterial round-trips")
     }
 
     print(failures == 0 ? "\nAll checks passed ✅" : "\n\(failures) check(s) failed ❌")

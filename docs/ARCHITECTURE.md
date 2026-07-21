@@ -45,20 +45,44 @@ synthesizes a centered virtual handle on notchless displays.
 
 ## Visual surface: three states, one window
 
-`NotchRootView` renders one of three states from a single window:
+`NotchRootView` renders one of three states from a single window, always clipped to
+`NotchShape` — a custom `Shape` with concave "shoulder" corners that hug the physical
+notch:
 
-- **Collapsed** — `NotchShape`, a custom `Shape` with concave "shoulder" corners that
-  hug the physical notch. Filled solid black, matching the hardware bezel.
-- **Peek** — the same `NotchShape`, briefly widened (`NotchViewModel.showPeek`), showing
-  a small icon + one line of text. Auto-dismisses after ~2s; never fires while the notch
+- **Collapsed** — the resting state.
+- **Peek** — the same shape, briefly widened (`NotchViewModel.showPeek`), showing a
+  small icon + one line of text. Auto-dismisses after ~2s; never fires while the notch
   is expanded or hovered.
-- **Expanded** — a plain rounded rectangle backed by `GlassBackground`, a SwiftUI wrapper
-  around AppKit's native `NSGlassEffectView` (macOS 26's real Liquid Glass material).
-  `NSGlassEffectView` only exposes a single uniform `cornerRadius` — it can't mask to
-  `NotchShape`'s asymmetric silhouette — so the expanded panel intentionally switches to
-  a plain rounded rect rather than faking glass on the notch shape.
+- **Expanded** — the notch fully opens.
 
-Two rules keep the glass stable, both learned from it visibly breaking:
+**Material follows `SettingsStore.notchMaterial`.** In **Solid** mode the notch is
+opaque black in all three states, no exceptions. In **Liquid Glass** mode, the notch
+stays opaque black through collapsed and peek — reading as an extension of the
+physical hardware bezel — and only reveals real translucency (AppKit's native
+`NSGlassEffectView`, bridged into SwiftUI as `GlassBackground`) once actually
+*expanded*. Nothing is glass while collapsed; the glass content is only meaningful (and
+only interactive) once open.
+
+Both the black fill and the glass layer are **permanently present views**, never
+structurally inserted or removed — only their opacity animates between 0 and 1,
+crossed over together (black fades out as glass fades in). That distinction matters:
+earlier versions broke this twice.
+
+- **Don't structurally swap between materials.** An `if isExpanded { glassTree } else
+  { blackTree }` was the very first version. SwiftUI can't animate across two different
+  view identities, so the glass tint popped in instantly instead of transitioning with
+  the resize.
+- **Don't leave an opaque layer permanently behind the glass.** Fixing the above by
+  keeping *both* layers permanently present but leaving the black fill at opacity 1
+  the whole time seemed like the fix — until it was clear there was no transparency at
+  all. `NSGlassEffectView` refracts whatever is actually drawn behind it; a
+  permanently-opaque black layer behind it means it refracts its own black, not the
+  desktop, and reads as solid regardless of its own opacity. The black layer's opacity
+  has to actually reach 0 for the glass above it to mean anything — which is exactly
+  what "black until opened" requires anyway: fade the black *out* as the glass fades
+  *in*, both keyed off the same `isExpanded` transition.
+
+Two more rules, both about not fighting a *second* glass view:
 
 - **Don't host SwiftUI inside `NSGlassEffectView.contentView`.** It manages its own
   content layout, and swapping a hosted SwiftUI tree underneath it (changing notch tabs)
@@ -67,6 +91,11 @@ Two rules keep the glass stable, both learned from it visibly breaking:
 - **Don't nest glass inside glass.** The selected tab chip originally used its own
   `NSGlassEffectView`; moving that nested view between tabs killed the parent panel's
   effect. It's now a plain translucent capsule.
+
+`NSGlassEffectView` also only exposes a single uniform `cornerRadius` — it can't mask
+to `NotchShape`'s asymmetric silhouette on its own, so `GlassBackground` is clipped to
+`NotchShape` from the SwiftUI side rather than relying on the native view's own corner
+handling.
 
 ## Features
 
