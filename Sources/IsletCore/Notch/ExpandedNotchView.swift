@@ -34,9 +34,10 @@ struct ExpandedNotchView: View {
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
             .help("Islet Settings")
         }
         .padding(.horizontal, 6)
@@ -64,13 +65,17 @@ private struct TabChip: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: tab.symbol).font(.system(size: 11, weight: .semibold))
-                Text(tab.title).font(.system(size: 11, weight: .medium))
+                Text(tab.title).font(.system(size: 11, weight: .medium, design: .rounded))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(
-                Capsule().fill(Color.white.opacity(isSelected ? 0.16 : 0))
-            )
+            .background {
+                if isSelected {
+                    GlassEffectView(cornerRadius: 12, tint: Color.accentColor.opacity(0.35)) {
+                        Color.clear
+                    }
+                }
+            }
             .foregroundStyle(.white.opacity(isSelected ? 1 : 0.55))
         }
         .buttonStyle(.plain)

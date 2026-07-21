@@ -21,6 +21,9 @@ struct ShelfItem: Identifiable, Equatable {
 final class DropShelfManager: ObservableObject {
     @Published private(set) var items: [ShelfItem] = []
 
+    /// Fires each time a file is successfully added to the shelf.
+    let itemAdded = PassthroughSubject<ShelfItem, Never>()
+
     private let log = Logger(subsystem: "com.dynamicisland.islet", category: "DropShelf")
     private let shelfDir: URL
 
@@ -69,6 +72,7 @@ final class DropShelfManager: ObservableObject {
             try FileManager.default.copyItem(at: source, to: destination)
             let item = ShelfItem(id: UUID(), url: destination, addedAt: Date())
             items.insert(item, at: 0)
+            itemAdded.send(item)
         } catch {
             log.error("Could not add \(source.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }

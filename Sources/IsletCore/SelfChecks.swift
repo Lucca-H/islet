@@ -33,9 +33,28 @@ public func runIsletSelfChecks() -> Int {
     do {
         check(ExpandTrigger.allCases.allSatisfy { ExpandTrigger(rawValue: $0.rawValue) == $0 }, "ExpandTrigger round-trips")
         check(ScreenTargeting.allCases.allSatisfy { ScreenTargeting(rawValue: $0.rawValue) == $0 }, "ScreenTargeting round-trips")
-        check(NowPlayingInfo.Source.spotify.bundleID == "com.spotify.client", "Spotify bundle id")
-        check(NowPlayingInfo.Source.music.bundleID == "com.apple.Music", "Music bundle id")
         check(NotchTab.allCases.allSatisfy { !$0.title.isEmpty && !$0.symbol.isEmpty }, "every tab has a title and symbol")
+    }
+
+    print("NowPlayingInfo")
+    do {
+        let a = NowPlayingInfo(title: "Song", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
+        let b = NowPlayingInfo(title: "Song", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
+        let c = NowPlayingInfo(title: "Other", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
+        check(a == b, "identical now-playing snapshots are equal")
+        check(a != c, "different titles are unequal")
+    }
+
+    print("MediaRemoteBridge")
+    do {
+        check(MediaRemoteBridge.shared.isAvailable, "MediaRemote framework symbols resolved")
+    }
+
+    print("NotchPeek")
+    do {
+        let peek = NotchPeek.fileAdded(name: "report.pdf")
+        check(peek.text == "Added report.pdf", "fileAdded formats its text")
+        check(!peek.symbol.isEmpty, "every peek kind has a symbol")
     }
 
     print("ClipItem")

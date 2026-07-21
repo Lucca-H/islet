@@ -26,6 +26,30 @@ enum NotchTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// A brief, low-key indicator shown by momentarily widening the collapsed pill —
+/// distinct from a full expand, so background events don't feel intrusive.
+enum NotchPeek: Equatable {
+    case nowPlaying(title: String, artist: String)
+    case fileAdded(name: String)
+    case copied(preview: String)
+
+    var symbol: String {
+        switch self {
+        case .nowPlaying: return "music.note"
+        case .fileAdded:  return "tray.and.arrow.down.fill"
+        case .copied:     return "doc.on.clipboard.fill"
+        }
+    }
+
+    var text: String {
+        switch self {
+        case let .nowPlaying(title, artist): return artist.isEmpty ? title : "\(title) — \(artist)"
+        case let .fileAdded(name): return "Added \(name)"
+        case let .copied(preview): return preview
+        }
+    }
+}
+
 /// Drives a single notch surface: expansion state, the selected tab, and the
 /// shared feature managers the views render.
 @MainActor
@@ -39,9 +63,11 @@ final class NotchViewModel: ObservableObject {
     @Published var isHovering = false
     @Published var isDropTargeted = false
     @Published var selectedTab: NotchTab = .nowPlaying
+    @Published private(set) var peek: NotchPeek?
 
     private var cancellables = Set<AnyCancellable>()
     private var closeWorkItem: DispatchWorkItem?
+    private var peekWorkItem: DispatchWorkItem?
 
     init(settings: SettingsStore,
          nowPlaying: NowPlayingManager,
@@ -146,5 +172,26 @@ final class NotchViewModel: ObservableObject {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
             isExpanded = false
         }
+    }
+
+    // MARK: Peek (subtle live activity)
+
+    /// Briefly widen the collapsed pill to show a low-key indicator. No-ops while
+    /// the notch is already expanded or actively hovered, so it never interrupts
+    /// something the user is looking at.
+    func showPeek(_ kind: NotchPeek, duration: TimeInterval = 2.0) {
+        guard !isExpanded, !isHovering else { return }
+        peekWorkItem?.cancel()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+            peek = kind
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                self.peek = nil
+            }
+        }
+        peekWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 }

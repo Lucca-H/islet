@@ -1,6 +1,6 @@
 import Testing
 import SwiftUI
-@testable import Islet
+@testable import IsletCore
 
 // MARK: NotchShape
 
@@ -34,9 +34,18 @@ import SwiftUI
     }
 }
 
-@Test func nowPlayingSourceBundleIDs() {
-    #expect(NowPlayingInfo.Source.spotify.bundleID == "com.spotify.client")
-    #expect(NowPlayingInfo.Source.music.bundleID == "com.apple.Music")
+@Test func nowPlayingInfoEquality() {
+    let a = NowPlayingInfo(title: "Song", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
+    let b = NowPlayingInfo(title: "Song", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
+    let c = NowPlayingInfo(title: "Other", artist: "Artist", album: "Album", isPlaying: true, sourceName: "Chrome")
+    #expect(a == b)
+    #expect(a != c)
+}
+
+@Test func notchPeekFormatting() {
+    let peek = NotchPeek.fileAdded(name: "report.pdf")
+    #expect(peek.text == "Added report.pdf")
+    #expect(!peek.symbol.isEmpty)
 }
 
 // MARK: ClipItem equality

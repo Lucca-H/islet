@@ -52,9 +52,10 @@ struct DropShelfView: View {
                 .font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
             Spacer()
             Button("Clear All") { vm.shelf.clear() }
-                .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.7))
         }
         .padding(.top, 6)
     }

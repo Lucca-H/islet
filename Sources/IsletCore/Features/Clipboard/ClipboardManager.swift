@@ -38,6 +38,9 @@ struct ClipItem: Identifiable, Equatable {
 final class ClipboardManager: ObservableObject {
     @Published private(set) var items: [ClipItem] = []
 
+    /// Fires each time a new entry is captured from the system pasteboard.
+    let itemCaptured = PassthroughSubject<ClipItem, Never>()
+
     private let settings: SettingsStore
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount: Int
@@ -97,8 +100,10 @@ final class ClipboardManager: ObservableObject {
         // De-duplicate: if identical to the newest entry, just bump it.
         if let first = items.first, first.kind == kind { return }
         items.removeAll { $0.kind == kind }
-        items.insert(ClipItem(kind: kind, date: Date()), at: 0)
+        let item = ClipItem(kind: kind, date: Date())
+        items.insert(item, at: 0)
         trim()
+        itemCaptured.send(item)
     }
 
     private func trim() {

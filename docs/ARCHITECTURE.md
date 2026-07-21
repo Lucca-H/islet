@@ -21,8 +21,9 @@ main.swift ──▶ AppDelegate
                         ├── NotchWindow (borderless NSPanel)
                         ├── NotchViewModel (expansion state + selected tab)
                         └── NotchRootView (SwiftUI)
-                               ├── CollapsedNotchView
-                               └── ExpandedNotchView → {NowPlaying, Shelf, Clipboard} views
+                               ├── CollapsedNotchView   (solid black, exact notch silhouette)
+                               ├── PeekContentView       (brief live-activity hint)
+                               └── ExpandedNotchView     (GlassEffectView) → {NowPlaying, Shelf, Clipboard} views
 ```
 
 ## Notch window & hover
@@ -42,15 +43,38 @@ through transparent window areas.
 `ScreenNotch` resolves the notch rectangle from `NSScreen.auxiliaryTopLeftArea/RightArea`, and
 synthesizes a centered virtual handle on notchless displays.
 
+## Visual surface: three states, one window
+
+`NotchRootView` renders one of three states from a single window:
+
+- **Collapsed** — `NotchShape`, a custom `Shape` with concave "shoulder" corners that
+  hug the physical notch. Filled solid black, matching the hardware bezel.
+- **Peek** — the same `NotchShape`, briefly widened (`NotchViewModel.showPeek`), showing
+  a small icon + one line of text. Auto-dismisses after ~2s; never fires while the notch
+  is expanded or hovered.
+- **Expanded** — a plain rounded rectangle rendered through `GlassEffectView`, a SwiftUI
+  wrapper around AppKit's native `NSGlassEffectView` (macOS 26's real Liquid Glass
+  material). `NSGlassEffectView` only exposes a single uniform `cornerRadius` — it can't
+  mask to `NotchShape`'s asymmetric silhouette — so the expanded panel intentionally
+  switches to a plain rounded rect rather than trying to fake glass on the notch shape.
+
 ## Features
 
-- **NowPlayingManager** polls Music/Spotify with `osascript` every 1.5 s. It intentionally
-  avoids the private MediaRemote framework, which Apple restricted behind a private entitlement
-  in recent macOS, so a third-party app can no longer read the system Now Playing feed reliably.
+- **NowPlayingManager** reads system-wide playback through `MediaRemoteBridge`, a thin
+  `dlopen`/`dlsym` wrapper around the private `MediaRemote.framework` — the same feed
+  behind Control Center's Now Playing widget. This covers Music, Spotify, *and* browser
+  tabs playing web audio (anything using the Media Session API), plus real embedded
+  artwork bytes and the source app's name/icon (via `MRMediaRemoteGetNowPlayingApplicationPID`).
+  It registers for push notifications and polls as a light backup. Every symbol lookup is
+  optional — a missing symbol degrades to "nothing playing" rather than crashing.
 - **DropShelfManager** copies dropped files into `~/Library/Application Support/Islet/Shelf`
   and vends them back as draggable `NSItemProvider`s.
 - **ClipboardManager** polls `NSPasteboard.changeCount`, records text/images, de-duplicates,
   trims to the configured limit, and skips `org.nspasteboard.ConcealedType`/`TransientType`.
+
+Both `DropShelfManager` and `ClipboardManager` publish Combine events (`itemAdded`,
+`itemCaptured`) that `AppDelegate` forwards into `NotchViewModel.showPeek`, alongside
+`NowPlayingManager.playbackStarted` — one mechanism drives all three live activities.
 
 ## Settings
 

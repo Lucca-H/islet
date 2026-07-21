@@ -13,7 +13,7 @@ swift run IsletChecks     # fast logic checks — no Xcode required
 open build/Islet.app
 ```
 
-You need macOS 14+ and the Swift toolchain. Command Line Tools are sufficient for
+You need macOS 26 (Tahoe) or later and the Swift toolchain. Command Line Tools are sufficient for
 building and the self-checks; the full `swift test` suite needs Xcode.
 
 ## Project layout

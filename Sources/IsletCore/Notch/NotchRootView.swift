@@ -1,16 +1,33 @@
 import SwiftUI
 
-/// The visible notch surface: a black rounded shape that morphs between a compact
-/// collapsed pill and a full expanded panel with tabs.
+/// The visible notch surface. Three visual states share one surface:
+/// - **Collapsed** — a black pill hugging the exact physical notch silhouette.
+/// - **Peek** — the same silhouette, briefly widened, for a subtle live-activity hint.
+/// - **Expanded** — a plain rounded rectangle rendered in real Liquid Glass
+///   (`NSGlassEffectView` only supports uniform corners, so the notch-hugging
+///   shoulder shape is reserved for the collapsed/peek states).
 struct NotchRootView: View {
     let geometry: NotchGeometry
 
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
 
+    private enum VisualState { case collapsed, peek, expanded }
+
+    private var visualState: VisualState {
+        if vm.isExpanded { return .expanded }
+        if vm.peek != nil { return .peek }
+        return .collapsed
+    }
+
     private var collapsedSize: CGSize {
         CGSize(width: geometry.notchWidth,
                height: geometry.notchHeight + CGFloat(settings.closedHeightBoost))
+    }
+
+    private var peekSize: CGSize {
+        let width = min(CGFloat(settings.expandedWidth), geometry.notchWidth + 260)
+        return CGSize(width: width, height: geometry.notchHeight + CGFloat(settings.closedHeightBoost))
     }
 
     private var expandedSize: CGSize {
@@ -19,7 +36,11 @@ struct NotchRootView: View {
     }
 
     private var currentSize: CGSize {
-        vm.isExpanded ? expandedSize : collapsedSize
+        switch visualState {
+        case .collapsed: return collapsedSize
+        case .peek:       return peekSize
+        case .expanded:   return expandedSize
+        }
     }
 
     var body: some View {
@@ -31,26 +52,28 @@ struct NotchRootView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    @ViewBuilder
     private var notchBody: some View {
-        ZStack(alignment: .top) {
-            NotchShape(bottomRadius: CGFloat(settings.cornerRadius),
-                       topRadius: vm.isExpanded ? 12 : 8)
-                .fill(Color.black)
+        Group {
+            if visualState == .expanded {
+                GlassEffectView(cornerRadius: CGFloat(settings.cornerRadius),
+                                tint: Color.black.opacity(0.55)) {
+                    content
+                }
                 .overlay(
-                    NotchShape(bottomRadius: CGFloat(settings.cornerRadius),
-                               topRadius: vm.isExpanded ? 12 : 8)
-                        .stroke(Color.white.opacity(vm.isExpanded ? 0.08 : 0), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: CGFloat(settings.cornerRadius), style: .continuous)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
-
-            content
-                .frame(width: currentSize.width, height: currentSize.height)
-                .clipped()
+            } else {
+                NotchShape(bottomRadius: CGFloat(settings.cornerRadius), topRadius: 8)
+                    .fill(Color.black)
+                    .overlay(content)
+            }
         }
         .frame(width: currentSize.width, height: currentSize.height)
-        .contentShape(NotchShape(bottomRadius: CGFloat(settings.cornerRadius),
-                                 topRadius: vm.isExpanded ? 12 : 8))
-        .shadow(color: .black.opacity(vm.isExpanded ? 0.45 : 0),
-                radius: vm.isExpanded ? 24 : 0, x: 0, y: 12)
+        .contentShape(Rectangle())
+        .shadow(color: .black.opacity(visualState == .expanded ? 0.45 : 0),
+                radius: visualState == .expanded ? 24 : 0, x: 0, y: 12)
         .onTapGesture { vm.clicked() }
         .onHover { inside in
             // Backup for the expanded state (window is interactive then).
@@ -61,6 +84,7 @@ struct NotchRootView: View {
             return vm.shelf.accept(providers: providers)
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.74), value: vm.isExpanded)
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: vm.peek)
     }
 
     private var dropBinding: Binding<Bool> {
@@ -70,15 +94,27 @@ struct NotchRootView: View {
 
     @ViewBuilder
     private var content: some View {
-        if vm.isExpanded {
+        switch visualState {
+        case .expanded:
             ExpandedNotchView()
                 .environmentObject(vm)
                 .environmentObject(settings)
+                .frame(width: currentSize.width, height: currentSize.height)
+                .clipped()
                 .transition(.opacity)
-        } else {
-            CollapsedNotchView(notchSize: collapsedSize)
+        case .peek:
+            if let peek = vm.peek {
+                PeekContentView(peek: peek)
+                    .frame(width: currentSize.width, height: currentSize.height)
+                    .clipped()
+                    .transition(.opacity)
+            }
+        case .collapsed:
+            CollapsedNotchView(notchSize: currentSize)
                 .environmentObject(vm)
                 .environmentObject(settings)
+                .frame(width: currentSize.width, height: currentSize.height)
+                .clipped()
                 .transition(.opacity)
         }
     }
@@ -125,6 +161,28 @@ private struct CollapsedNotchView: View {
                 .fill(Color.white.opacity(0.15))
                 .overlay(Image(systemName: "music.note").font(.system(size: 9)).foregroundStyle(.white.opacity(0.7)))
         }
+    }
+}
+
+/// The subtle live-activity peek: a small icon and a single line of text,
+/// vertically centered in the momentarily widened pill.
+private struct PeekContentView: View {
+    let peek: NotchPeek
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: peek.symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Text(peek.text)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .tracking(0.1)
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

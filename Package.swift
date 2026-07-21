@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Islet",
     platforms: [
-        .macOS(.v14)
+        .macOS("26.0")
     ],
     products: [
         .executable(name: "Islet", targets: ["Islet"])

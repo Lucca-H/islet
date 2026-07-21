@@ -38,9 +38,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.applyFeatureState() }
             .store(in: &cancellables)
 
-        // Auto-peek the notch when a new track starts playing.
+        // Subtle live-activity peeks for background events — brief, low-key,
+        // never a full expand.
         nowPlaying.playbackStarted
-            .sink { [weak self] _ in self?.pulseNowPlaying() }
+            .sink { [weak self] info in
+                self?.peek(.nowPlaying(title: info.title, artist: info.artist))
+            }
+            .store(in: &cancellables)
+
+        shelf.itemAdded
+            .sink { [weak self] item in self?.peek(.fileAdded(name: item.name)) }
+            .store(in: &cancellables)
+
+        clipboard.itemCaptured
+            .sink { [weak self] item in
+                let preview: String
+                switch item.kind {
+                case let .text(value):
+                    preview = "Copied: \(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))"
+                case .image:
+                    preview = "Copied an image"
+                }
+                self?.peek(.copied(preview: preview))
+            }
             .store(in: &cancellables)
     }
 
@@ -71,15 +91,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if settings.clipboardEnabled { clipboard.start() } else { clipboard.stop() }
     }
 
-    /// Briefly open the Now Playing tab on the primary notch when a track starts.
-    private func pulseNowPlaying() {
-        guard settings.nowPlayingEnabled, let primary = controllers.first else { return }
-        primary.viewModel.selectedTab = .nowPlaying
-        primary.viewModel.open()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak primary] in
-            guard let primary, !primary.viewModel.isHovering else { return }
-            primary.viewModel.close()
-        }
+    /// Show a subtle peek on the primary notch for a background event.
+    private func peek(_ kind: NotchPeek) {
+        controllers.first?.viewModel.showPeek(kind)
     }
 
     // MARK: - Pointer monitoring

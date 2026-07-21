@@ -155,15 +155,16 @@ private struct AboutSettings: View {
 
 @ViewBuilder
 private func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String, step: Double = 0.05) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: 6) {
         HStack {
             Text(title)
             Spacer()
             Text("\(value.wrappedValue, specifier: step < 1 ? "%.2f" : "%.0f")\(unit)")
                 .foregroundStyle(.secondary).monospacedDigit()
         }
-        Slider(value: value, in: range, step: step)
+        GlassSlider(value: value, range: range, step: step)
     }
+    .padding(.vertical, 4)
 }
 
 /// Bundle-derived app metadata used across the UI.

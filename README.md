@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/OWNER/islet/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/islet/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/OWNER/islet?include_prereleases&sort=semver)](https://github.com/OWNER/islet/releases)
-![Platform](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
+![Platform](https://img.shields.io/badge/macOS-26%2B-black?logo=apple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 <img src="docs/assets/banner.png" width="720" alt="Islet banner" />
@@ -22,13 +22,15 @@
 
 ## Features
 
-Hover the notch and it expands into a compact panel with three tabs:
+Hover the notch and it expands into a real **Liquid Glass** panel with three tabs.
 
 ### 🎵 Now Playing
-- Detects the current track from **Apple Music** and **Spotify**.
-- Album art, title, and artist, with **play / pause / next / previous** controls.
+- **System-wide** detection — Apple Music, Spotify, and web audio playing in a browser
+  tab (Safari, Chrome, anything using the Media Session API), via the same feed that
+  powers Control Center's Now Playing widget.
+- Real embedded album/cover art, title, artist, and source app, with
+  **play / pause / next / previous** controls.
 - When collapsed, the notch peeks the album art and a live audio-bars indicator.
-- The notch briefly auto-opens when a new track starts.
 
 ### 🗂 Drop Shelf
 - Drag any file onto the notch to stash it on a temporary shelf.
@@ -39,6 +41,16 @@ Hover the notch and it expands into a compact panel with three tabs:
 - Keeps a rolling history of copied **text and images**.
 - Click any entry to copy it back to the pasteboard.
 - Skips passwords and transient copies from password managers (configurable).
+
+### ✨ Live activities
+A subtle, brief widening of the collapsed pill — not a full expand — hints at background
+events: a track starting, a file landing on the shelf, something new on the clipboard.
+Never fires while you're already looking at the notch.
+
+### 🧊 Liquid Glass throughout
+The expanded panel is rendered with AppKit's native `NSGlassEffectView` (macOS 26's real
+glass material), buttons use the system `.glass` button style, and Settings has a
+custom glass slider — not an imitation blur.
 
 ### ⚙️ Settings
 A full preferences window covering:
@@ -61,10 +73,10 @@ A full preferences window covering:
    ```bash
    xattr -dr com.apple.quarantine /Applications/Islet.app
    ```
-4. On first launch, grant **Automation** permission when prompted (needed to read Music/Spotify).
+4. No further setup — no permissions to grant for Now Playing.
 
 ### Build from source
-Requires macOS 14+ and either Xcode or the Swift toolchain (Command Line Tools are enough).
+Requires macOS 26 (Tahoe) or later, and either Xcode or the Swift toolchain (Command Line Tools are enough).
 ```bash
 git clone https://github.com/OWNER/islet.git
 cd islet
@@ -76,14 +88,15 @@ open build/Islet.app
 
 ## Permissions
 
-| Permission | Why | When |
-|-----------|-----|------|
-| **Automation** (Music / Spotify) | Read the currently playing track and send transport commands. | Prompted on first playback detection. |
-| **Accessibility** | Not required. | — |
+Now Playing needs no permission prompt — it reads the system's Now Playing feed the same
+way Control Center does. No Accessibility or Automation access is required.
 
-Islet does **not** use the private MediaRemote framework — Apple gated it behind a private
-entitlement in recent macOS releases — so Now Playing is provided via AppleScript for the two
-most common players. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> **Note on private APIs.** Now Playing detection uses `MediaRemote.framework`, and the
+> expanded panel uses `NSGlassEffectView` — both are real system frameworks, loaded and
+> called normally, but `MediaRemote` is undocumented (not part of the public SDK). It's
+> the same mechanism many popular menu-bar Now Playing widgets rely on, and it degrades
+> gracefully (Now Playing just shows nothing) if a future macOS update changes it. See
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
 
 ---
 
