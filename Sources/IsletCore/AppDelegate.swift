@@ -22,6 +22,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mouseMonitors: [Any] = []
     private var cancellables = Set<AnyCancellable>()
     private var controllerCancellables = Set<AnyCancellable>()
+    private var audioVisualizerRetryTimer: Timer?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarController()
@@ -145,13 +146,45 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// The cost of running whenever enabled is that macOS keeps its screen-recording
     /// indicator up for as long as the toggle is on; that's disclosed in Settings.
+    ///
+    /// `AudioVisualizerEngine.start()` silently no-ops if permission isn't granted
+    /// yet — and nothing was ever calling it *again*. If the toggle was already on
+    /// from a previous session, `applyFeatureState()` tries once at launch; if
+    /// permission is granted afterward (the normal flow: launch, notice it's dark,
+    /// go grant it in System Settings), that one attempt already failed and nothing
+    /// retried. `retryTimer` keeps trying at a low rate until it actually succeeds.
     private func updateAudioVisualizerState() {
         let shouldRun = settings.audioVisualizerEnabled && settings.nowPlayingEnabled
         if shouldRun {
             audioVisualizer.start()
+            startAudioVisualizerRetryLoopIfNeeded()
         } else {
             audioVisualizer.stop()
+            audioVisualizerRetryTimer?.invalidate()
+            audioVisualizerRetryTimer = nil
         }
+    }
+
+    private func startAudioVisualizerRetryLoopIfNeeded() {
+        guard audioVisualizerRetryTimer == nil else { return }
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.settings.audioVisualizerEnabled, self.settings.nowPlayingEnabled else {
+                    self.audioVisualizerRetryTimer?.invalidate()
+                    self.audioVisualizerRetryTimer = nil
+                    return
+                }
+                if self.audioVisualizer.isCapturing {
+                    self.audioVisualizerRetryTimer?.invalidate()
+                    self.audioVisualizerRetryTimer = nil
+                    return
+                }
+                self.audioVisualizer.start()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        audioVisualizerRetryTimer = timer
     }
 
     /// Show a subtle peek on the primary notch for a background event.

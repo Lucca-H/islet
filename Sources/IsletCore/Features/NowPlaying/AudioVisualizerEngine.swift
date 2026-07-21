@@ -23,6 +23,11 @@ final class AudioVisualizerEngine: ObservableObject {
     /// Levels for each frequency band, 0...1, smoothed for a pleasant visual decay.
     @Published private(set) var bars: [CGFloat] = Array(repeating: 0, count: bandCount)
     @Published private(set) var isCapturing = false
+    /// Refreshed on every `start()` attempt (not read live), so observers — the
+    /// Settings status row, chiefly — actually see it flip once permission is
+    /// granted mid-session, instead of a stale value that only a coincidental
+    /// re-render would happen to refresh.
+    @Published private(set) var isAuthorized: Bool = CGPreflightScreenCaptureAccess()
 
     /// Whether real audio is currently coming through, with a short hold so brief
     /// gaps between tracks (or quiet passages) don't make the bars flicker away.
@@ -49,14 +54,14 @@ final class AudioVisualizerEngine: ObservableObject {
 
     private init() {}
 
-    var isAuthorized: Bool { CGPreflightScreenCaptureAccess() }
-
     /// Triggers the system permission prompt the first time; a no-op (returning the
     /// current status) on every call after. Once denied, only System Settings can
     /// change it — there is no in-app re-prompt.
     @discardableResult
     func requestAccess() -> Bool {
-        CGRequestScreenCaptureAccess()
+        let granted = CGRequestScreenCaptureAccess()
+        isAuthorized = granted
+        return granted
     }
 
     func openSystemSettings() {
@@ -65,6 +70,9 @@ final class AudioVisualizerEngine: ObservableObject {
     }
 
     func start() {
+        // Refreshed on every attempt — this is what lets a retry loop notice
+        // permission being granted mid-session without anything else re-rendering.
+        isAuthorized = CGPreflightScreenCaptureAccess()
         guard !isCapturing, !isStarting, isAuthorized else { return }
         isStarting = true
 

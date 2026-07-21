@@ -151,7 +151,7 @@ private struct AudioVisualizerSettingsRow: View {
             return engine.hasSignal ? "Capturing — audio detected" : "Capturing — no audio right now"
         }
         if engine.isAuthorized { return "Authorized — starting…" }
-        return "Not authorized yet"
+        return "Not authorized — checking again automatically"
     }
 }
 

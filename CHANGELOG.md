@@ -6,6 +6,17 @@ All notable changes to Islet are documented here. This project follows
 ## [0.1.0-beta.3] — 2026-07-21
 
 ### Fixed
+- **The audio visualizer never recovered from being denied at launch.**
+  `AudioVisualizerEngine.start()` silently no-ops if permission isn't granted at the
+  moment it's called — and nothing ever called it again. If the toggle was already on
+  from a previous session, the one attempt at launch fails before the user has had a
+  chance to grant anything, and the visualizer then sits dark for the rest of the run,
+  even after permission is granted in System Settings — the normal flow being launch,
+  notice it's dark, go grant it. `AppDelegate` now retries every 2s until it actually
+  succeeds. `AudioVisualizerEngine.isAuthorized` also moved from a computed property
+  (silently stale — nothing forced a re-render when the OS-level grant changed) to a
+  `@Published` one refreshed on every attempt, so the Settings status row now visibly
+  updates once permission lands instead of needing a coincidental, unrelated re-render.
 - **The expanded panel's tab strip rendered inside the notch band**, putting it behind
   the camera housing on real hardware. The panel is sized `notchHeight + expandedHeight`
   and its doc comment claimed the tab strip was "pinned under the notch" — but no top
