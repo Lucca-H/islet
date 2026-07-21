@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build -v
+
+      - name: Self-checks
+        run: swift run IsletChecks
+
+      - name: Test
+        run: swift test
+
+      - name: Assemble app bundle
+        run: ./scripts/build_app.sh release
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Islet.app
+          path: build/Islet.app
