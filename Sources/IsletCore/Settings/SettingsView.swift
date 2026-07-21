@@ -100,8 +100,56 @@ private struct NotchSettings: View {
             sliderRow("Corner radius", value: $settings.cornerRadius, range: 8...40, unit: "pt")
             sliderRow("Closed height boost", value: $settings.closedHeightBoost, range: 0...16, unit: "pt")
             Toggle("Peek album art when playing", isOn: $settings.peekMediaArt)
+
+            Section("Audio visualizer") {
+                AudioVisualizerSettingsRow()
+            }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Real frequency-band audio bars, driven by actual system audio via
+/// ScreenCaptureKit — opt-in, since it needs Screen & System Audio Recording
+/// permission, the heaviest ask anywhere in Islet.
+private struct AudioVisualizerSettingsRow: View {
+    @EnvironmentObject var settings: SettingsStore
+    @ObservedObject private var engine = AudioVisualizerEngine.shared
+
+    var body: some View {
+        Toggle("Real audio visualizer", isOn: $settings.audioVisualizerEnabled)
+            .onChange(of: settings.audioVisualizerEnabled) { _, enabled in
+                if enabled, !engine.isAuthorized { engine.requestAccess() }
+            }
+
+        Text("Replaces the collapsed notch's audio bars with a live frequency visualizer of whatever's actually playing, instead of a decorative animation. Requires granting **Screen & System Audio Recording** — the same permission Zoom or OBS use — even though only the audio channel is ever read. While it's active, macOS shows its standard screen-recording indicator.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        if settings.audioVisualizerEnabled {
+            HStack {
+                statusIndicator
+                Text(statusText).font(.footnote).foregroundStyle(.secondary)
+                Spacer()
+                if !engine.isAuthorized {
+                    Button("Open System Settings…") { engine.openSystemSettings() }
+                        .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private var statusIndicator: some View {
+        Circle()
+            .fill(engine.isCapturing ? Color.green : (engine.isAuthorized ? Color.yellow : Color.red))
+            .frame(width: 7, height: 7)
+    }
+
+    private var statusText: String {
+        if engine.isCapturing { return "Capturing live audio" }
+        if engine.isAuthorized { return "Authorized — will start once something plays" }
+        return "Not authorized yet"
     }
 }
 
@@ -113,6 +161,7 @@ private struct FeatureSettings: View {
                 Toggle("Now Playing", isOn: $settings.nowPlayingEnabled)
                 Toggle("Drop Shelf", isOn: $settings.dropShelfEnabled)
                 Toggle("Clipboard History", isOn: $settings.clipboardEnabled)
+                Toggle("Quick Note", isOn: $settings.quickNoteEnabled)
             }
             Text("Disabled features are hidden from the notch tab bar.")
                 .font(.footnote).foregroundStyle(.secondary)

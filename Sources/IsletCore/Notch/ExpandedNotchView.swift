@@ -52,6 +52,8 @@ struct ExpandedNotchView: View {
             DropShelfView().environmentObject(vm)
         case .clipboard:
             ClipboardView().environmentObject(vm)
+        case .quickNote:
+            QuickNoteView().environmentObject(vm)
         }
     }
 }

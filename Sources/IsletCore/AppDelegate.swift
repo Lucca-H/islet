@@ -12,6 +12,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var nowPlaying = NowPlayingManager()
     private lazy var shelf = DropShelfManager()
     private lazy var clipboard = ClipboardManager(settings: settings)
+    private let audioVisualizer = AudioVisualizerEngine.shared
+    private lazy var quickNote = QuickNoteManager()
 
     private var statusBar: StatusBarController?
     private var controllers: [NotchController] = []
@@ -38,6 +40,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.objectWillChange
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.applyFeatureState() }
+            .store(in: &cancellables)
+
+        // Capture system audio only while both the setting is on and something is
+        // actually playing — never idly, so the system recording indicator isn't
+        // up any longer than it has to be.
+        nowPlaying.$info
+            .map { $0?.isPlaying ?? false }
+            .removeDuplicates()
+            .sink { [weak self] _ in self?.updateAudioVisualizerState() }
             .store(in: &cancellables)
 
         // Subtle live-activity peeks for background events — brief, low-key,
@@ -82,7 +93,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let viewModel = NotchViewModel(settings: settings,
                                            nowPlaying: nowPlaying,
                                            shelf: shelf,
-                                           clipboard: clipboard)
+                                           clipboard: clipboard,
+                                           audioVisualizer: audioVisualizer,
+                                           quickNote: quickNote)
             controllers.append(NotchController(geometry: geometry, viewModel: viewModel))
 
             // @Published fires in willSet, so read the settled state next tick.
@@ -119,6 +132,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyFeatureState() {
         if settings.nowPlayingEnabled { nowPlaying.start() } else { nowPlaying.stop() }
         if settings.clipboardEnabled { clipboard.start() } else { clipboard.stop() }
+        updateAudioVisualizerState()
+    }
+
+    private func updateAudioVisualizerState() {
+        let shouldRun = settings.audioVisualizerEnabled
+            && settings.nowPlayingEnabled
+            && (nowPlaying.info?.isPlaying ?? false)
+        if shouldRun {
+            audioVisualizer.start()
+        } else {
+            audioVisualizer.stop()
+        }
     }
 
     /// Show a subtle peek on the primary notch for a background event.

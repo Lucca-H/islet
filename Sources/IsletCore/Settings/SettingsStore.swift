@@ -64,6 +64,7 @@ final class SettingsStore: ObservableObject {
     @Published var nowPlayingEnabled: Bool { didSet { persist(oldValue, nowPlayingEnabled, "nowPlayingEnabled") } }
     @Published var dropShelfEnabled: Bool  { didSet { persist(oldValue, dropShelfEnabled, "dropShelfEnabled") } }
     @Published var clipboardEnabled: Bool  { didSet { persist(oldValue, clipboardEnabled, "clipboardEnabled") } }
+    @Published var quickNoteEnabled: Bool  { didSet { persist(oldValue, quickNoteEnabled, "quickNoteEnabled") } }
 
     // MARK: Notch behavior
     @Published var expandTrigger: ExpandTrigger { didSet { persistRaw(oldValue.rawValue, expandTrigger.rawValue, "expandTrigger") } }
@@ -71,6 +72,9 @@ final class SettingsStore: ObservableObject {
     @Published var hoverCloseDelay: Double { didSet { persist(oldValue, hoverCloseDelay, "hoverCloseDelay") } }
     @Published var hapticFeedback: Bool    { didSet { persist(oldValue, hapticFeedback, "hapticFeedback") } }
     @Published var peekMediaArt: Bool      { didSet { persist(oldValue, peekMediaArt, "peekMediaArt") } }
+    /// Off by default: this requires granting Screen & System Audio Recording
+    /// permission, a materially heavier ask than anything else Islet does.
+    @Published var audioVisualizerEnabled: Bool { didSet { persist(oldValue, audioVisualizerEnabled, "audioVisualizerEnabled") } }
 
     // MARK: Notch size / shape
     @Published var notchMaterial: NotchMaterial { didSet { persistRaw(oldValue.rawValue, notchMaterial.rawValue, "notchMaterial") } }
@@ -103,6 +107,7 @@ final class SettingsStore: ObservableObject {
         nowPlayingEnabled = defaults.object(forKey: "nowPlayingEnabled") as? Bool ?? true
         dropShelfEnabled  = defaults.object(forKey: "dropShelfEnabled")  as? Bool ?? true
         clipboardEnabled  = defaults.object(forKey: "clipboardEnabled")  as? Bool ?? true
+        quickNoteEnabled  = defaults.object(forKey: "quickNoteEnabled")  as? Bool ?? true
 
         let trigger = defaults.string(forKey: "expandTrigger").flatMap(ExpandTrigger.init) ?? .hover
         expandTrigger = trigger
@@ -110,6 +115,7 @@ final class SettingsStore: ObservableObject {
         hoverCloseDelay = defaults.object(forKey: "hoverCloseDelay") as? Double ?? 0.35
         hapticFeedback  = defaults.object(forKey: "hapticFeedback")  as? Bool ?? true
         peekMediaArt    = defaults.object(forKey: "peekMediaArt")    as? Bool ?? true
+        audioVisualizerEnabled = defaults.object(forKey: "audioVisualizerEnabled") as? Bool ?? false
 
         let material = defaults.string(forKey: "notchMaterial").flatMap(NotchMaterial.init) ?? .liquidGlass
         notchMaterial = material
@@ -135,11 +141,13 @@ final class SettingsStore: ObservableObject {
         nowPlayingEnabled = true
         dropShelfEnabled = true
         clipboardEnabled = true
+        quickNoteEnabled = true
         expandTrigger = .hover
         hoverOpenDelay = 0.05
         hoverCloseDelay = 0.35
         hapticFeedback = true
         peekMediaArt = true
+        audioVisualizerEnabled = false
         notchMaterial = .liquidGlass
         expandedWidth = 640
         expandedHeight = 210

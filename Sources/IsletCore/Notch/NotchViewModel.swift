@@ -6,6 +6,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
     case nowPlaying
     case shelf
     case clipboard
+    case quickNote
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
         case .nowPlaying: return "Now Playing"
         case .shelf:      return "Shelf"
         case .clipboard:  return "Clipboard"
+        case .quickNote:  return "Quick Note"
         }
     }
 
@@ -22,6 +24,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
         case .nowPlaying: return "music.note"
         case .shelf:      return "tray.full"
         case .clipboard:  return "doc.on.clipboard"
+        case .quickNote:  return "note.text"
         }
     }
 }
@@ -58,6 +61,8 @@ final class NotchViewModel: ObservableObject {
     let nowPlaying: NowPlayingManager
     let shelf: DropShelfManager
     let clipboard: ClipboardManager
+    let audioVisualizer: AudioVisualizerEngine
+    let quickNote: QuickNoteManager
 
     @Published var isExpanded = false
     @Published var isHovering = false
@@ -72,14 +77,18 @@ final class NotchViewModel: ObservableObject {
     init(settings: SettingsStore,
          nowPlaying: NowPlayingManager,
          shelf: DropShelfManager,
-         clipboard: ClipboardManager) {
+         clipboard: ClipboardManager,
+         audioVisualizer: AudioVisualizerEngine,
+         quickNote: QuickNoteManager) {
         self.settings = settings
         self.nowPlaying = nowPlaying
         self.shelf = shelf
         self.clipboard = clipboard
+        self.audioVisualizer = audioVisualizer
+        self.quickNote = quickNote
 
         // Re-publish nested manager changes so SwiftUI updates.
-        for object in [settings, nowPlaying, shelf, clipboard] as [any ObservableObject] {
+        for object in [settings, nowPlaying, shelf, clipboard, audioVisualizer, quickNote] as [any ObservableObject] {
             (object.objectWillChange as any Publisher as? ObservableObjectPublisher)?
                 .sink { [weak self] in self?.objectWillChange.send() }
                 .store(in: &cancellables)
@@ -97,6 +106,7 @@ final class NotchViewModel: ObservableObject {
             case .nowPlaying: return settings.nowPlayingEnabled
             case .shelf:      return settings.dropShelfEnabled
             case .clipboard:  return settings.clipboardEnabled
+            case .quickNote:  return settings.quickNoteEnabled
             }
         }
     }

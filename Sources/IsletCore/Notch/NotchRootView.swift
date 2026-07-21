@@ -31,12 +31,12 @@ struct NotchRootView: View {
     }
 
     private var collapsedSize: CGSize {
-        CGSize(width: geometry.notchWidth,
+        CGSize(width: geometry.collapsedContentWidth,
                height: geometry.notchHeight + CGFloat(settings.closedHeightBoost))
     }
 
     private var peekSize: CGSize {
-        let width = min(CGFloat(settings.expandedWidth), geometry.notchWidth + 260)
+        let width = min(CGFloat(settings.expandedWidth), collapsedSize.width + 260)
         return CGSize(width: width, height: geometry.notchHeight + CGFloat(settings.closedHeightBoost))
     }
 
@@ -219,24 +219,44 @@ private struct PeekContentView: View {
 }
 
 /// A small animated equalizer used as the "audio is playing" indicator.
+///
+/// Shows real frequency-band levels from `AudioVisualizerEngine` when it's actually
+/// capturing (opt-in, needs Screen Recording permission — see `SettingsStore.
+/// audioVisualizerEnabled`). Otherwise falls back to a lively but non-audio-reactive
+/// animation, same bar count, so nothing about the layout shifts based on whether
+/// the feature is enabled.
 struct AudioBars: View {
-    @State private var phase: CGFloat = 0
+    @EnvironmentObject var vm: NotchViewModel
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.12)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2) {
-                ForEach(0..<3, id: \.self) { i in
-                    Capsule()
-                        .fill(Color.white)
-                        .frame(height: barHeight(index: i, time: t))
-                        .frame(maxHeight: .infinity, alignment: .center)
+        Group {
+            if vm.audioVisualizer.isCapturing {
+                HStack(spacing: 2) {
+                    ForEach(Array(vm.audioVisualizer.bars.enumerated()), id: \.offset) { _, level in
+                        Capsule()
+                            .fill(Color.white)
+                            .frame(height: 3 + level * 13)
+                            .frame(maxHeight: .infinity, alignment: .center)
+                            .animation(.easeOut(duration: 0.08), value: level)
+                    }
+                }
+            } else {
+                TimelineView(.animation(minimumInterval: 0.12)) { timeline in
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                    HStack(spacing: 2) {
+                        ForEach(0..<AudioVisualizerEngine.bandCount, id: \.self) { i in
+                            Capsule()
+                                .fill(Color.white)
+                                .frame(height: fakeBarHeight(index: i, time: t))
+                                .frame(maxHeight: .infinity, alignment: .center)
+                        }
+                    }
                 }
             }
         }
     }
 
-    private func barHeight(index: Int, time: TimeInterval) -> CGFloat {
+    private func fakeBarHeight(index: Int, time: TimeInterval) -> CGFloat {
         let speed = 3.2
         let offset = Double(index) * 1.1
         let v = (sin(time * speed + offset) + 1) / 2 // 0...1
