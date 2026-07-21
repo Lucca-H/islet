@@ -3,6 +3,28 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.0-beta.4] — 2026-07-21
+
+### Fixed
+- **The audio visualizer could go permanently unregistered for Screen Recording
+  permission**, showing "Not authorized" indefinitely with no path to fix it short of
+  toggling the Settings switch off and back on. `CGRequestScreenCaptureAccess()` — not
+  just preflighting — is what actually registers Islet with TCC and shows the system
+  prompt the first time; it was only being called from the Settings toggle's
+  `onChange`, which fires on a *transition*. Since `audioVisualizerEnabled` persists
+  across launches, the common case is opening Settings and seeing the toggle already
+  on — no transition, `onChange` never fires, `requestAccess()` never called, Islet
+  never registered for that build's hash. `AudioVisualizerEngine.start()` now calls
+  `requestAccess()` itself on every attempt (the retry loop already added in
+  beta.3 means this costs nothing extra), closing the gap regardless of how the
+  toggle got to "on."
+- Confirmed live, end-to-end, that `NowPlayingManager` itself has no bugs: run in
+  isolation against real Spotify playback it resolved title/artist/artwork in under a
+  second, both via the reactive notification path and the AppleScript catch-up poll.
+  Automation permission was also confirmed *not* to be gated for AppleScript spawned
+  via `/usr/bin/osascript` on this setup — a completely fresh, never-before-seen app
+  queried Spotify's current track instantly with no prompt at all.
+
 ## [0.1.0-beta.3] — 2026-07-21
 
 ### Fixed

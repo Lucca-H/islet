@@ -70,9 +70,15 @@ final class AudioVisualizerEngine: ObservableObject {
     }
 
     func start() {
-        // Refreshed on every attempt — this is what lets a retry loop notice
-        // permission being granted mid-session without anything else re-rendering.
-        isAuthorized = CGPreflightScreenCaptureAccess()
+        // CGRequestScreenCaptureAccess (not just preflighting) on every attempt.
+        // Preflighting only *checks* status; requesting is what actually registers
+        // Islet in TCC and shows the system prompt the first time. The Settings
+        // toggle's onChange also calls requestAccess(), but onChange only fires on
+        // a transition — if audioVisualizerEnabled was already true from a previous
+        // session, opening Settings and seeing it already on triggers nothing, so
+        // that path alone could leave Islet never actually registered for a given
+        // build. Requesting here means every retry tick closes that gap too.
+        isAuthorized = requestAccess()
         guard !isCapturing, !isStarting, isAuthorized else { return }
         isStarting = true
 
