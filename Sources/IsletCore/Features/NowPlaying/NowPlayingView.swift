@@ -1,5 +1,21 @@
 import SwiftUI
 
+/// Sizing rules for the Now Playing row, extracted so they can be verified directly
+/// rather than only through a rendered view.
+enum NowPlayingLayout {
+    /// Album art (and, at 0.92x, the visualizer) fills the available height, capped
+    /// against width.
+    ///
+    /// Both are squares driven by height, sitting either side of a metadata column
+    /// whose transport row can't shrink below ~118pt. Sizing on height alone
+    /// overflowed at narrow "Expanded width" settings — at 420x210 the metadata
+    /// column was left 12pt; at 420x340 it went negative. The cap only binds when
+    /// width is genuinely tight; at the 640pt default it's inactive.
+    static func artSize(availableHeight: CGFloat, availableWidth: CGFloat) -> CGFloat {
+        max(72, min(availableHeight, availableWidth * 0.3))
+    }
+}
+
 /// Expanded Now Playing panel.
 ///
 /// Three columns, left to right: large album art, the track's identity and transport
@@ -18,10 +34,8 @@ struct NowPlayingView: View {
             // a smaller "Expanded height" setting (or the notch inset on real
             // hardware) shrinks the art instead of overflowing the panel.
             GeometryReader { proxy in
-                // Fills the content height rather than sitting at a fixed size, so
-                // the black margin above and below the art equals the panel's own
-                // inset instead of being padding + leftover slack.
-                let artSize = max(72, proxy.size.height)
+                let artSize = NowPlayingLayout.artSize(availableHeight: proxy.size.height,
+                                                       availableWidth: proxy.size.width)
                 HStack(alignment: .center, spacing: 18) {
                     artwork
                         .frame(width: artSize, height: artSize)

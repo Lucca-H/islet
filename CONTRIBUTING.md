@@ -14,8 +14,35 @@ swift run IsletProbe      # live Now Playing diagnostic (prints what it resolves
 open build/Islet.app
 ```
 
-`IsletProbe` also accepts `--synthetic`, which injects a fake Music notification so the
-detection path can be exercised without anything actually playing.
+`IsletProbe` also accepts:
+
+- `--synthetic` — injects a fake Music notification, so the detection path can be
+  exercised without anything actually playing.
+- `--visualizer` — starts the real capture engine and prints frequency-band levels
+  once a second, for checking the visualizer against actually-playing audio.
+
+Note that `IsletProbe` is a separate bundle identifier from Islet, so macOS tracks its
+Screen Recording permission separately — `--visualizer` will report "not authorized"
+until the probe itself is granted access, independently of the app.
+
+## Debugging the audio visualizer
+
+Capture failures are otherwise silent, so the engine records what it's doing to
+`UserDefaults`:
+
+```bash
+defaults read com.dynamicisland.islet visualizerDebugLog
+```
+
+The same log is in the app under Settings → Notch → Audio visualizer → *Diagnostic
+log*, with a Copy button.
+
+Because Islet is ad-hoc signed, its code hash changes on **every rebuild**, and macOS
+pins Screen Recording permission to that hash — so a grant stops applying after any
+rebuild, and the leftover "Islet" row in System Settings refers to a binary that no
+longer exists. Settings has a *Reset Permission & Quit Islet…* button for this; it runs
+`tccutil reset ScreenCapture com.dynamicisland.islet`. A stable Developer ID signature
+would remove the problem entirely.
 
 You need macOS 26 (Tahoe) or later and the Swift toolchain. Command Line Tools are sufficient for
 building and the self-checks; the full `swift test` suite needs Xcode.

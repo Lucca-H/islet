@@ -89,7 +89,10 @@ final class AudioVisualizerEngine: ObservableObject {
 
     private let log = Logger(subsystem: "com.dynamicisland.islet", category: "AudioVisualizer")
     private var stream: SCStream?
-    private let output = AudioOutput()
+    /// Lazy so the FFT setup (which force-unwraps `vDSP_create_fftsetup`) isn't
+    /// allocated at app launch for the majority of users who never turn the
+    /// visualizer on — this is a singleton reached during `AppDelegate` init.
+    private lazy var output = AudioOutput()
     private var isStarting = false
 
     private init() {}
@@ -252,6 +255,10 @@ final class AudioVisualizerEngine: ObservableObject {
         hasSignal = false
         lastSignalAt = nil
         lastBufferAt = nil
+        // Reset per-session so a restart logs its own first buffer — that line is
+        // what tells us whether a watchdog restart actually recovered audio, versus
+        // reconnecting to a stream that stays silent.
+        hasReceivedAnyBuffer = false
         signalTimer?.invalidate()
         signalTimer = nil
         Task { try? await toStop?.stopCapture() }

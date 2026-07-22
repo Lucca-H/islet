@@ -176,21 +176,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Runs for as long as capture *should* be running — idling while it actually is,
+    /// rather than tearing itself down on first success.
+    ///
+    /// It previously invalidated itself the moment `isCapturing` became true, which
+    /// left a hole: if the engine's watchdog later caught a stalled stream and its
+    /// `stop()`/`start()` restart failed (permission dropped, no display, etc.), the
+    /// engine's own timer was already gone with `stop()` and this loop had retired —
+    /// so nothing retried, and the visualizer stayed dead until playback state
+    /// happened to change. An idle tick every 2s is far cheaper than reintroducing
+    /// the silent-death bug this whole mechanism exists to prevent.
     private func startAudioVisualizerRetryLoopIfNeeded() {
         guard audioVisualizerRetryTimer == nil else { return }
         let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                guard self.settings.audioVisualizerEnabled, self.settings.nowPlayingEnabled else {
-                    self.audioVisualizerRetryTimer?.invalidate()
-                    self.audioVisualizerRetryTimer = nil
-                    return
-                }
-                if self.audioVisualizer.isCapturing {
-                    self.audioVisualizerRetryTimer?.invalidate()
-                    self.audioVisualizerRetryTimer = nil
-                    return
-                }
+                // Only `shouldRun` going false retires the loop — handled by
+                // updateAudioVisualizerState, which invalidates it directly.
+                guard self.settings.audioVisualizerEnabled, self.settings.nowPlayingEnabled else { return }
+                guard !self.audioVisualizer.isCapturing else { return }
                 self.audioVisualizer.start()
             }
         }
