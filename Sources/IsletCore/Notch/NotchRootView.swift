@@ -90,8 +90,15 @@ struct NotchRootView: View {
             // what lets the glass end up genuinely transparent once fully open: a
             // permanently-opaque layer behind it would refract itself, not the
             // desktop, and read as solid regardless of its own opacity.
+            // The click-to-toggle target lives on the background layer, not on the
+            // whole notch body. When it was on the container it competed with the
+            // tab chips for hit-testing, which made switching tabs feel sluggish and
+            // occasionally drop a click. Buttons consume their own taps, so putting
+            // the gesture underneath them leaves both working.
             shape.fill(Color.black)
                 .opacity(blackOpacity)
+                .contentShape(shape)
+                .onTapGesture { vm.clicked() }
 
             if settings.notchMaterial == .liquidGlass {
                 shape
@@ -100,9 +107,11 @@ struct NotchRootView: View {
                                tint: Color(white: 0.55, opacity: 0.22))
                     .clipShape(shape)
                     .opacity(vm.isExpanded ? 1 : 0)
+                    .allowsHitTesting(false) // purely decorative
             }
 
             shape.stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .allowsHitTesting(false)
 
             content
         }
@@ -111,7 +120,6 @@ struct NotchRootView: View {
         .contentShape(Rectangle())
         .shadow(color: .black.opacity(visualState == .expanded ? 0.45 : 0),
                 radius: visualState == .expanded ? 24 : 0, x: 0, y: 12)
-        .onTapGesture { vm.clicked() }
         .onHover { inside in
             // Backup for the expanded state (window is interactive then).
             if vm.isExpanded { vm.isHovering = inside; if !inside { vm.pointerExited() } }

@@ -49,7 +49,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         nowPlaying.$info
             .map { $0?.isPlaying ?? false }
             .removeDuplicates()
-            .sink { [weak self] _ in self?.updateAudioVisualizerState() }
+            // The mapped value is passed through rather than discarded: `@Published`
+            // emits in `willSet`, so re-reading `nowPlaying.info` inside the sink
+            // still returns the *previous* value. Doing that meant the gate below saw
+            // "not playing" at the exact moment playback started, so capture was
+            // never begun — the visualizer stayed dark no matter what.
+            .sink { [weak self] isPlaying in
+                self?.updateAudioVisualizerState(isPlayingOverride: isPlaying)
+            }
             .store(in: &cancellables)
 
         // Subtle live-activity peeks for background events — brief, low-key,
@@ -151,10 +158,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// permission is granted afterward (the normal flow: launch, notice it's dark,
     /// go grant it in System Settings), that one attempt already failed and nothing
     /// retried. `retryTimer` keeps trying at a low rate until it actually succeeds.
-    private func updateAudioVisualizerState() {
+    /// - Parameter isPlayingOverride: supplied by the `$info` subscription, whose
+    ///   `willSet`-timed emission means the stored property is still stale when the
+    ///   sink runs. Callers outside that subscription can omit it and read live state.
+    private func updateAudioVisualizerState(isPlayingOverride: Bool? = nil) {
+        let isPlaying = isPlayingOverride ?? (nowPlaying.info?.isPlaying ?? false)
         let shouldRun = settings.audioVisualizerEnabled
             && settings.nowPlayingEnabled
-            && (nowPlaying.info?.isPlaying ?? false)
+            && isPlaying
         if shouldRun {
             audioVisualizer.start()
             startAudioVisualizerRetryLoopIfNeeded()

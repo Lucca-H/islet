@@ -20,8 +20,14 @@ struct CircularVisualizerView: View {
     var size: CGFloat
     var tint: Color = .white
 
-    private var ringRadius: CGFloat { size * 0.26 }
-    private var maxBarLength: CGFloat { size * 0.17 }
+    /// Raw FFT magnitudes are perceptually flat at typical listening levels — the
+    /// bars technically move but read as barely alive. This multiplies the level
+    /// before it's mapped to a length (clamped, so peaks pin at full height rather
+    /// than overflow the ring), which is what gives the spectrum visible punch.
+    private let peakGain: CGFloat = 2.6
+
+    private var ringRadius: CGFloat { size * 0.27 }
+    private var maxBarLength: CGFloat { size * 0.22 }
     private let barWidth: CGFloat = 2.5
 
     var body: some View {
@@ -50,14 +56,17 @@ struct CircularVisualizerView: View {
                     // A slow travelling wave — clearly "idle", not faking audio.
                     let phase = Double(index) / Double(count) * .pi * 2
                     let value = (sin(t * 1.6 + phase * 3) + 1) / 2
-                    bar(index: index, total: count, level: 0.06 + CGFloat(value) * 0.16)
+                    // Idle wave is already tuned for its own look — don't apply the
+                    // live-audio boost on top, or it saturates into a solid ring.
+                    bar(index: index, total: count, level: 0.06 + CGFloat(value) * 0.16, boost: false)
                 }
             }
         }
     }
 
-    private func bar(index: Int, total: Int, level: CGFloat) -> some View {
-        let clamped = min(max(level, 0), 1)
+    private func bar(index: Int, total: Int, level: CGFloat, boost: Bool = true) -> some View {
+        let raw = min(max(level, 0), 1)
+        let clamped = boost ? min(raw * peakGain, 1) : raw
         let length = max(2, clamped * maxBarLength)
         let degrees = Double(index) / Double(max(total, 1)) * 360
 

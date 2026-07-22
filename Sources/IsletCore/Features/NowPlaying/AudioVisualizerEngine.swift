@@ -46,6 +46,17 @@ final class AudioVisualizerEngine: ObservableObject {
     private var lastSignalAt: Date?
     private var signalTimer: Timer?
     private var hasRequestedAccess = false
+    private var hasReceivedAnyBuffer = false
+
+    /// Mirrors engine state into `UserDefaults` so it can be inspected from a
+    /// terminal (`defaults read com.dynamicisland.islet visualizerDebugStatus`).
+    /// `os_log` isn't readable back without extra permissions on this setup, and a
+    /// silently-dead visualizer gives no other outward signal to debug from.
+    private func recordDebug(_ message: String) {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        UserDefaults.standard.set("[\(stamp)] \(message)", forKey: "visualizerDebugStatus")
+        log.info("\(message, privacy: .public)")
+    }
 
     /// Enough bands for the circular visualizer to read as a detailed spectrum
     /// rather than a few chunky blocks. The compact pill bars downsample this via
@@ -109,9 +120,13 @@ final class AudioVisualizerEngine: ObservableObject {
             hasRequestedAccess = true
             isAuthorized = requestAccess()
         }
-        guard !isCapturing, !isStarting, isAuthorized else { return }
+        guard !isCapturing, !isStarting, isAuthorized else {
+            recordDebug("start() skipped — capturing=\(isCapturing) starting=\(isStarting) authorized=\(isAuthorized)")
+            return
+        }
         isStarting = true
         lastError = nil
+        recordDebug("start() proceeding — authorized, opening SCStream")
 
         output.onBands = { [weak self] bands in
             Task { @MainActor in self?.applyBands(bands) }
@@ -147,12 +162,13 @@ final class AudioVisualizerEngine: ObservableObject {
                     self.isStarting = false
                     self.lastError = nil
                     self.startSignalTimer()
+                    self.recordDebug("capture STARTED successfully")
                 }
             } catch {
-                self.log.error("Audio visualizer failed to start: \(error.localizedDescription, privacy: .public)")
                 await MainActor.run {
                     self.isStarting = false
                     self.lastError = error.localizedDescription
+                    self.recordDebug("capture FAILED: \(error.localizedDescription)")
                 }
             }
         }
@@ -187,7 +203,12 @@ final class AudioVisualizerEngine: ObservableObject {
 
     private func applyBands(_ bands: [CGFloat]) {
         bars = bands
-        if (bands.max() ?? 0) > Self.signalThreshold {
+        let peak = bands.max() ?? 0
+        if !hasReceivedAnyBuffer {
+            hasReceivedAnyBuffer = true
+            recordDebug("first audio buffer received — peak=\(String(format: "%.4f", peak))")
+        }
+        if peak > Self.signalThreshold {
             lastSignalAt = Date()
             if !hasSignal { hasSignal = true }
         }

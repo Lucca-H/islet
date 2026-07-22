@@ -18,7 +18,10 @@ struct NowPlayingView: View {
             // a smaller "Expanded height" setting (or the notch inset on real
             // hardware) shrinks the art instead of overflowing the panel.
             GeometryReader { proxy in
-                let artSize = max(72, min(140, proxy.size.height))
+                // Fills the content height rather than sitting at a fixed size, so
+                // the black margin above and below the art equals the panel's own
+                // inset instead of being padding + leftover slack.
+                let artSize = max(72, proxy.size.height)
                 HStack(alignment: .center, spacing: 18) {
                     artwork
                         .frame(width: artSize, height: artSize)
