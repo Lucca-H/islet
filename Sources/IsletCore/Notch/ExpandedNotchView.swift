@@ -5,14 +5,19 @@ struct ExpandedNotchView: View {
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
 
-    /// One inset on every side, so the black margin reads as even all around.
-    ///
-    /// A previous version gave the bottom edge extra padding on a theory that the
-    /// panel's rounded corners needed more clearance there — backwards. The actual
-    /// feedback was that the footer floated too far *above* the bottom edge, and
-    /// the corner-clearance version made exactly that worse (16pt → ~26pt at the
-    /// default corner radius). Uniform 16pt on every side, as originally asked for.
+    /// Inset for the sides and the top of the content area.
     private static let contentInset: CGFloat = 16
+
+    /// The bottom edge gets its own, deliberately tighter value.
+    ///
+    /// Every tab ends in a footer row (item count / last-edited text on the left, a
+    /// button on the right), and at the shared 16pt inset that row read as floating
+    /// too far above the panel's bottom edge. An earlier attempt went the wrong way
+    /// entirely — it *added* clearance for the rounded corners (~26pt), making the
+    /// float worse. 10pt still clears the corner curve comfortably: at 10pt up from
+    /// the bottom, a 22pt-radius corner has pulled the edge in by only ~3.6pt, well
+    /// short of the button's 16pt side inset.
+    private static let bottomInset: CGFloat = 10
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,7 +32,9 @@ struct ExpandedNotchView: View {
 
             selectedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(Self.contentInset)
+                .padding(.horizontal, Self.contentInset)
+                .padding(.top, Self.contentInset)
+                .padding(.bottom, Self.bottomInset)
         }
         .foregroundStyle(.white)
     }

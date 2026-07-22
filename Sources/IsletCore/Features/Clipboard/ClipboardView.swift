@@ -55,11 +55,22 @@ private struct ClipRow: View {
     @EnvironmentObject var vm: NotchViewModel
     @State private var hovering = false
 
+    private static let iconSize: CGFloat = 26
+
     var body: some View {
         HStack(spacing: 10) {
             icon
-                .frame(width: 26, height: 26)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                .frame(width: Self.iconSize, height: Self.iconSize)
+                // Clip *after* the frame, not inside `icon`. Doing it inside meant a
+                // copied screenshot was scaled to its own natural (huge) size by
+                // `aspectRatio(.fill)`, clipped at that size, and only then given a
+                // 26pt layout frame — so its pixels spilled out over the row and
+                // painted across the label next to it.
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
 
             preview
                 .font(.system(size: 12))
@@ -93,8 +104,8 @@ private struct ClipRow: View {
         case .text:
             Image(systemName: "text.alignleft").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
         case let .image(image):
+            // Clipping is applied by the caller, after the frame — see the note there.
             Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 
