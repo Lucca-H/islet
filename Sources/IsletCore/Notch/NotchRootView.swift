@@ -194,8 +194,11 @@ private struct CollapsedNotchView: View {
             }
             Spacer(minLength: 0)
             if isPlaying {
+                // 1.2x requested — container and bar-height formula (in AudioBars)
+                // scaled together so bars stay proportional to their box instead of
+                // just clipping against an unchanged frame.
                 AudioBars()
-                    .frame(width: 16, height: notchSize.height * 0.42)
+                    .frame(width: 16 * 1.2, height: notchSize.height * 0.42 * 1.2)
                     .padding(.trailing, 12)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -251,6 +254,10 @@ struct AudioBars: View {
     /// The pill is only ~16pt wide, so the full 32-band spectrum is downsampled to
     /// something legible at that size. The circular visualizer uses all of it.
     private static let compactBandCount = 4
+    /// Matches the 1.2x applied to this view's container frame — kept as one factor
+    /// here rather than baked into the base/amplitude constants individually, so the
+    /// two stay obviously in sync if either changes again.
+    private static let scale: CGFloat = 1.2
 
     var body: some View {
         Group {
@@ -260,7 +267,7 @@ struct AudioBars: View {
                     ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                         Capsule()
                             .fill(Color.white)
-                            .frame(height: 3 + level * 13)
+                            .frame(height: (3 + level * 13) * Self.scale)
                             .frame(maxHeight: .infinity, alignment: .center)
                             .animation(.easeOut(duration: 0.08), value: level)
                     }
@@ -285,6 +292,6 @@ struct AudioBars: View {
         let speed = 3.2
         let offset = Double(index) * 1.1
         let v = (sin(time * speed + offset) + 1) / 2 // 0...1
-        return 3 + CGFloat(v) * 10
+        return (3 + CGFloat(v) * 10) * Self.scale
     }
 }

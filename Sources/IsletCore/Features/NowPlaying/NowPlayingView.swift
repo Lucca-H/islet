@@ -35,10 +35,15 @@ struct NowPlayingView: View {
                     metadata(info, height: artSize)
 
                     if settings.audioVisualizerEnabled {
+                        // artSize already equals the row's full available height — a
+                        // literal 1.7x here would need to be 70% taller than the row
+                        // itself and get clipped. This fills the row completely
+                        // (0.92 -> 1.0, its actual ceiling); the requested boldness
+                        // otherwise comes from CircularVisualizerView's thicker bars.
                         CircularVisualizerView(
                             levels: vm.audioVisualizer.bars,
                             isLive: vm.audioVisualizer.isCapturing && vm.audioVisualizer.hasSignal,
-                            size: artSize * 0.92
+                            size: artSize
                         )
                     }
                 }

@@ -28,7 +28,11 @@ struct CircularVisualizerView: View {
 
     private var ringRadius: CGFloat { size * 0.27 }
     private var maxBarLength: CGFloat { size * 0.22 }
-    private let barWidth: CGFloat = 2.5
+    /// 2.5 → 4.4, roughly the requested 1.7x. Bar *thickness* rather than the ring or
+    /// bar-length ratios, which already reach ~98% of `size` at peak — growing those
+    /// further would push bars past their own frame into whatever sits beside them.
+    /// Thickness reads as noticeably bolder/denser with no overflow risk.
+    private let barWidth: CGFloat = 4.4
 
     var body: some View {
         ZStack {

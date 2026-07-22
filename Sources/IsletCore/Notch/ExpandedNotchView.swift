@@ -5,11 +5,22 @@ struct ExpandedNotchView: View {
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
 
-    /// One inset used for the header, the content, and the bottom edge, so the black
-    /// margin around the panel's contents reads as even on all sides. (Previously the
-    /// horizontal inset was split across two modifiers — 10 outer + 14 inner = 24 —
-    /// while the vertical inset was only 14, so the surround looked lopsided.)
+    /// Base inset used for the header, the content's top/sides, so the black margin
+    /// reads as even there. (Previously the horizontal inset was split across two
+    /// modifiers — 10 outer + 14 inner = 24 — while the vertical inset was only 14,
+    /// so the surround looked lopsided.)
     private static let contentInset: CGFloat = 16
+
+    /// The bottom edge needs *more* than `contentInset` on its own: the panel's
+    /// corners curve at `settings.cornerRadius` (22pt by default), so a full-width
+    /// footer row — every tab has one (last-edited/item-count text + a button) —
+    /// sitting at a flat 16pt inset has its trailing edge crowd straight into that
+    /// curve. Scaling the extra amount off the actual corner radius keeps the footer
+    /// clear of the curve at any "Corner radius" Settings value instead of just the
+    /// default.
+    private var bottomInset: CGFloat {
+        Self.contentInset + CGFloat(settings.cornerRadius) * 0.45
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +35,9 @@ struct ExpandedNotchView: View {
 
             selectedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(Self.contentInset)
+                .padding(.horizontal, Self.contentInset)
+                .padding(.top, Self.contentInset)
+                .padding(.bottom, bottomInset)
         }
         .foregroundStyle(.white)
     }
