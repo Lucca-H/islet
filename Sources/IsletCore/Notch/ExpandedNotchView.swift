@@ -5,22 +5,14 @@ struct ExpandedNotchView: View {
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
 
-    /// Base inset used for the header, the content's top/sides, so the black margin
-    /// reads as even there. (Previously the horizontal inset was split across two
-    /// modifiers — 10 outer + 14 inner = 24 — while the vertical inset was only 14,
-    /// so the surround looked lopsided.)
+    /// One inset on every side, so the black margin reads as even all around.
+    ///
+    /// A previous version gave the bottom edge extra padding on a theory that the
+    /// panel's rounded corners needed more clearance there — backwards. The actual
+    /// feedback was that the footer floated too far *above* the bottom edge, and
+    /// the corner-clearance version made exactly that worse (16pt → ~26pt at the
+    /// default corner radius). Uniform 16pt on every side, as originally asked for.
     private static let contentInset: CGFloat = 16
-
-    /// The bottom edge needs *more* than `contentInset` on its own: the panel's
-    /// corners curve at `settings.cornerRadius` (22pt by default), so a full-width
-    /// footer row — every tab has one (last-edited/item-count text + a button) —
-    /// sitting at a flat 16pt inset has its trailing edge crowd straight into that
-    /// curve. Scaling the extra amount off the actual corner radius keeps the footer
-    /// clear of the curve at any "Corner radius" Settings value instead of just the
-    /// default.
-    private var bottomInset: CGFloat {
-        Self.contentInset + CGFloat(settings.cornerRadius) * 0.45
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,9 +27,7 @@ struct ExpandedNotchView: View {
 
             selectedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, Self.contentInset)
-                .padding(.top, Self.contentInset)
-                .padding(.bottom, bottomInset)
+                .padding(Self.contentInset)
         }
         .foregroundStyle(.white)
     }
