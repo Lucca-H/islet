@@ -45,6 +45,18 @@ final class AudioVisualizerEngine: ObservableObject {
     private var hasRequestedAccess = false
     private var hasReceivedAnyBuffer = false
 
+    /// `SCStream` was created with `delegate: nil` — meaning if the capture session
+    /// died internally, Islet had **no way to find out**. It would just silently
+    /// stop receiving buffers forever, with `isCapturing` stuck at `true` and nothing
+    /// to catch or restart it. Two independent guards against that now: the delegate
+    /// actually reports `didStopWithError`, and a watchdog restarts capture if no
+    /// buffer has arrived in `staleCaptureTimeout` regardless of whether the delegate
+    /// fires at all (some SCStream failure modes are known to go quiet without ever
+    /// calling back).
+    private static let staleCaptureTimeout: TimeInterval = 4
+    private var lastBufferAt: Date?
+    private let streamDelegate = StreamDelegate()
+
     /// Mirrors engine state into `UserDefaults` so it can be inspected from a
     /// terminal (`defaults read com.dynamicisland.islet visualizerDebugStatus`).
     /// `os_log` isn't readable back without extra permissions on this setup, and a
@@ -143,6 +155,9 @@ final class AudioVisualizerEngine: ObservableObject {
         output.onRawFormatLogged = { [weak self] message in
             Task { @MainActor in self?.recordDebug("raw format: \(message)") }
         }
+        streamDelegate.onStop = { [weak self] error in
+            Task { @MainActor in self?.handleStreamStopped(error) }
+        }
 
         Task {
             do {
@@ -164,7 +179,7 @@ final class AudioVisualizerEngine: ObservableObject {
                 config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
                 config.showsCursor = false
 
-                let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+                let stream = SCStream(filter: filter, configuration: config, delegate: streamDelegate)
                 try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: DispatchQueue(label: "com.dynamicisland.islet.audiotap"))
                 try await stream.startCapture()
 
@@ -173,7 +188,8 @@ final class AudioVisualizerEngine: ObservableObject {
                     self.isCapturing = true
                     self.isStarting = false
                     self.lastError = nil
-                    self.startSignalTimer()
+                    self.lastBufferAt = Date() // seeds the watchdog before any real buffer has arrived
+                    self.startWatchdogTimer()
                     self.recordDebug("capture STARTED successfully")
                 }
             } catch {
@@ -186,17 +202,44 @@ final class AudioVisualizerEngine: ObservableObject {
         }
     }
 
-    /// Expires `hasSignal` once audio actually stops; the sample callback can only
-    /// ever tell us sound *is* present, never that it went away. Created only once
-    /// capture genuinely succeeds — an earlier version made it up-front on every
-    /// `start()`, so each failed retry (every 2s) stacked another live timer.
-    private func startSignalTimer() {
+    /// `SCStreamDelegate` actually reported the session ending. This is the "good"
+    /// failure path — the bad one is the watchdog in `checkWatchdog`, for cases that
+    /// never call this at all.
+    private func handleStreamStopped(_ error: Error?) {
+        let message = error?.localizedDescription ?? "(no error — stream ended cleanly)"
+        recordDebug("SCStreamDelegate reported stop: \(message)")
+        lastError = error?.localizedDescription
+        stop()
+        // The AppDelegate retry loop only calls start() on state transitions; this
+        // stop happened out-of-band, so kick a restart directly rather than waiting
+        // for one that may not come.
+        start()
+    }
+
+    /// One timer covering both failure modes: `hasSignal` expiring after real audio
+    /// actually stops, and the stream having gone silent without telling anyone.
+    /// Created only once capture genuinely succeeds — an earlier version made the
+    /// (then signal-only) timer up-front on every `start()`, so each failed retry
+    /// (every 2s) stacked another live timer.
+    private func startWatchdogTimer() {
         signalTimer?.invalidate()
-        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.expireSignalIfStale() }
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.expireSignalIfStale()
+                self?.checkWatchdog()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         signalTimer = timer
+    }
+
+    private func checkWatchdog() {
+        guard isCapturing, let lastBufferAt else { return }
+        let silentFor = Date().timeIntervalSince(lastBufferAt)
+        guard silentFor > Self.staleCaptureTimeout else { return }
+        recordDebug("watchdog: no buffer in \(String(format: "%.1f", silentFor))s while capturing — forcing restart")
+        stop()
+        start()
     }
 
     func stop() {
@@ -208,6 +251,7 @@ final class AudioVisualizerEngine: ObservableObject {
         bars = Array(repeating: 0, count: Self.bandCount)
         hasSignal = false
         lastSignalAt = nil
+        lastBufferAt = nil
         signalTimer?.invalidate()
         signalTimer = nil
         Task { try? await toStop?.stopCapture() }
@@ -215,6 +259,7 @@ final class AudioVisualizerEngine: ObservableObject {
 
     private func applyBands(_ bands: [CGFloat]) {
         bars = bands
+        lastBufferAt = Date()
         let peak = bands.max() ?? 0
         if !hasReceivedAnyBuffer {
             hasReceivedAnyBuffer = true
@@ -244,6 +289,22 @@ final class AudioVisualizerEngine: ObservableObject {
         if Date().timeIntervalSince(last) > Self.signalHold {
             hasSignal = false
         }
+    }
+}
+
+/// Reports when `SCStream` ends the capture session on its own.
+///
+/// Previously `SCStream` was constructed with `delegate: nil`, so a session dying
+/// internally (which does happen — SCStream capture is known to be interrupted by a
+/// range of system conditions) was completely invisible: no callback, no error, just
+/// silence forever. This alone doesn't catch every failure mode — some are known to
+/// go quiet without ever calling `didStopWithError` — which is why the engine also
+/// runs an independent buffer-arrival watchdog rather than relying on this alone.
+private final class StreamDelegate: NSObject, SCStreamDelegate, @unchecked Sendable {
+    var onStop: ((Error?) -> Void)?
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        onStop?(error)
     }
 }
 
