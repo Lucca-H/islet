@@ -24,15 +24,13 @@ struct CircularVisualizerView: View {
     /// bars technically move but read as barely alive. This multiplies the level
     /// before it's mapped to a length (clamped, so peaks pin at full height rather
     /// than overflow the ring), which is what gives the spectrum visible punch.
-    private let peakGain: CGFloat = 2.1
+    /// 2.6 → 2.1 → 1.7: each step made peaks *less* exaggerated, not more — a prior
+    /// reading of "1.7x" as an overall-size request was a misunderstanding, reverted.
+    private let peakGain: CGFloat = 1.7
 
     private var ringRadius: CGFloat { size * 0.27 }
     private var maxBarLength: CGFloat { size * 0.22 }
-    /// 2.5 → 4.4, roughly the requested 1.7x. Bar *thickness* rather than the ring or
-    /// bar-length ratios, which already reach ~98% of `size` at peak — growing those
-    /// further would push bars past their own frame into whatever sits beside them.
-    /// Thickness reads as noticeably bolder/denser with no overflow risk.
-    private let barWidth: CGFloat = 4.4
+    private let barWidth: CGFloat = 2.5
 
     var body: some View {
         ZStack {
