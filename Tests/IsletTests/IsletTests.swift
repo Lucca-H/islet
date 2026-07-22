@@ -192,17 +192,18 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
 /// can't shrink below ~118pt. Sizing art on height alone overflowed at narrow
 /// widths — at 420x210 the metadata column was left 12pt, at 420x340 it went
 /// negative, and both are reachable from the Settings sliders.
+@MainActor
 @Test func metadataColumnSurvivesEverySizeSetting() {
-    let transportRowMinimum: CGFloat = 30 + 10 + 38 + 10 + 30
-    for width in stride(from: 420.0, through: 900.0, by: 20.0) {
-        for height in stride(from: 140.0, through: 340.0, by: 20.0) {
-            let contentWidth = CGFloat(width) - 32
-            let contentHeight = CGFloat(height) + 32 - 38 - 1 - 26
+    let notchHeight: CGFloat = 32
+    for width in stride(from: 420.0, through: 900.0, by: 10.0) {
+        for height in stride(from: 140.0, through: 340.0, by: 10.0) {
+            let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
+            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
             let art = NowPlayingLayout.artSize(availableHeight: contentHeight,
                                                availableWidth: contentWidth)
-            let metadata = contentWidth - art - 18 - 18 - art * 0.92
-            #expect(metadata >= transportRowMinimum,
-                    "metadata column collapsed at \(width)x\(height)")
+            let metadata = NowPlayingLayout.metadataWidth(availableWidth: contentWidth, artSize: art)
+            #expect(metadata >= NowPlayingLayout.transportRowMinimum + NowPlayingLayout.metadataBreathingRoom,
+                    "metadata column collapsed at \(width)x\(height): \(metadata)pt")
         }
     }
 }

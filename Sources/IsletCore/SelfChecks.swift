@@ -158,23 +158,32 @@ public func runIsletSelfChecks() -> Int {
     print("NowPlaying layout")
     do {
         // Regression guard: album art and the circular visualizer are both squares
-        // driven by the panel's *height*, sitting either side of a metadata column
-        // whose transport row can't shrink below ~118pt. Sizing art on height alone
-        // overflowed at narrow widths — at 420x210 the metadata column was left 12pt,
-        // and at 420x340 it went negative. Both reachable from the Settings sliders.
-        let transportRowMinimum: CGFloat = 30 + 10 + 38 + 10 + 30
+        // driven by the panel's *height*, either side of a metadata column whose
+        // transport row can't shrink. Sizing art on height alone overflowed at narrow
+        // widths — at 420x210 the metadata column was left 12pt, and at 420x340 it
+        // went negative. Both reachable from the Settings sliders.
+        //
+        // Derived from the same constants the views render with, so widening the
+        // panel insets or growing the transport buttons fails here rather than
+        // silently overflowing on someone's screen.
+        let notchHeight: CGFloat = 32 // virtual notch; a real one is similar
         var worstCase: CGFloat = .greatestFiniteMagnitude
-        for width in stride(from: 420.0, through: 900.0, by: 20.0) {
-            for height in stride(from: 140.0, through: 340.0, by: 20.0) {
-                let contentWidth = CGFloat(width) - 32
-                let contentHeight = CGFloat(height) + 32 - 38 - 1 - 26
-                let art = NowPlayingLayout.artSize(availableHeight: contentHeight, availableWidth: contentWidth)
-                let metadata = contentWidth - art - 18 - 18 - art * 0.92
-                worstCase = min(worstCase, metadata)
+        var worstAt = ""
+        for width in stride(from: 420.0, through: 900.0, by: 10.0) {
+            for height in stride(from: 140.0, through: 340.0, by: 10.0) {
+                let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
+                let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+                let art = NowPlayingLayout.artSize(availableHeight: contentHeight,
+                                                   availableWidth: contentWidth)
+                let metadata = NowPlayingLayout.metadataWidth(availableWidth: contentWidth, artSize: art)
+                if metadata < worstCase {
+                    worstCase = metadata
+                    worstAt = "\(Int(width))x\(Int(height))"
+                }
             }
         }
-        check(worstCase >= transportRowMinimum,
-              "metadata column never collapses below the transport row across every size setting")
+        check(worstCase >= NowPlayingLayout.transportRowMinimum + NowPlayingLayout.metadataBreathingRoom,
+              "metadata column never collapses below the transport row (worst \(Int(worstCase))pt at \(worstAt), need \(Int(NowPlayingLayout.transportRowMinimum))pt)")
     }
 
     print(failures == 0 ? "\nAll checks passed ✅" : "\n\(failures) check(s) failed ❌")

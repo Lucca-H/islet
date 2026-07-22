@@ -6,25 +6,44 @@ struct ExpandedNotchView: View {
     @EnvironmentObject var settings: SettingsStore
 
     /// Inset for the sides and the top of the content area.
-    private static let contentInset: CGFloat = 16
+    ///
+    /// Not `private` so the Now Playing layout guard can measure the same width the
+    /// view actually gets — widening this eats directly into the space the art,
+    /// metadata and visualizer columns compete for.
+    static let contentInset: CGFloat = 22
 
     /// The bottom edge gets its own, deliberately tighter value.
     ///
     /// Every tab ends in a footer row (item count / last-edited text on the left, a
-    /// button on the right), and at the shared 16pt inset that row read as floating
-    /// too far above the panel's bottom edge. An earlier attempt went the wrong way
-    /// entirely — it *added* clearance for the rounded corners (~26pt), making the
-    /// float worse. 10pt still clears the corner curve comfortably: at 10pt up from
-    /// the bottom, a 22pt-radius corner has pulled the edge in by only ~3.6pt, well
-    /// short of the button's 16pt side inset.
-    private static let bottomInset: CGFloat = 10
+    /// button on the right), and at the shared inset that row read as floating too far
+    /// above the panel's bottom edge. An earlier attempt went the wrong way entirely —
+    /// it *added* clearance for the rounded corners, making the float worse. 10pt
+    /// still clears the corner curve comfortably: at 10pt up from the bottom, a
+    /// 22pt-radius corner has pulled the edge in by only ~3.6pt, well short of the
+    /// footer button's side inset.
+    static let bottomInset: CGFloat = 10
+
+    static let headerHeight: CGFloat = 34
+    static let headerTopPadding: CGFloat = 4
+    /// `Divider()` renders as a hairline.
+    static let dividerHeight: CGFloat = 1
+
+    /// Height the selected tab's content actually receives, given the whole panel.
+    static func contentHeight(panelHeight: CGFloat) -> CGFloat {
+        panelHeight - headerHeight - headerTopPadding - dividerHeight - contentInset - bottomInset
+    }
+
+    /// Width the selected tab's content actually receives.
+    static func contentWidth(panelWidth: CGFloat) -> CGFloat {
+        panelWidth - contentInset * 2
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
-                .frame(height: 34)
+                .frame(height: Self.headerHeight)
                 .padding(.horizontal, Self.contentInset)
-                .padding(.top, 4)
+                .padding(.top, Self.headerTopPadding)
 
             Divider()
                 .overlay(Color.white.opacity(0.06))

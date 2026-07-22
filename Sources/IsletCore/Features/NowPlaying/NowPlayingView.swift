@@ -1,18 +1,62 @@
 import SwiftUI
 
-/// Sizing rules for the Now Playing row, extracted so they can be verified directly
-/// rather than only through a rendered view.
+/// Sizing rules for the Now Playing row.
+///
+/// These live here rather than inline in the view so the layout guard in
+/// `SelfChecks`/tests measures the *same* numbers the view actually renders with —
+/// otherwise the guard silently stops reflecting reality the moment a constant is
+/// tweaked. Several of them are load-bearing together: widening the panel insets or
+/// growing the transport buttons both eat width that the art/visualizer columns are
+/// competing for.
 enum NowPlayingLayout {
-    /// Album art (and, at 0.92x, the visualizer) fills the available height, capped
-    /// against width.
+    static let columnSpacing: CGFloat = 18
+    /// Visualizer is sized as a fraction of the album art, so the two squares
+    /// flanking the metadata column stay visually related.
+    static let visualizerRatio: CGFloat = 0.92
+
+    static let smallButtonDiameter: CGFloat = 34
+    static let largeButtonDiameter: CGFloat = 42
+    static let buttonSpacing: CGFloat = 10
+
+    /// The transport row can't shrink — it's three fixed circles. This is the hard
+    /// floor the metadata column must always clear.
+    static var transportRowMinimum: CGFloat {
+        smallButtonDiameter * 2 + largeButtonDiameter + buttonSpacing * 2
+    }
+
+    /// Breathing room required *beyond* the bare transport row.
     ///
-    /// Both are squares driven by height, sitting either side of a metadata column
-    /// whose transport row can't shrink below ~118pt. Sizing on height alone
-    /// overflowed at narrow "Expanded width" settings — at 420x210 the metadata
-    /// column was left 12pt; at 420x340 it went negative. The cap only binds when
-    /// width is genuinely tight; at the 640pt default it's inactive.
+    /// Sizing the art so the metadata column lands exactly on `transportRowMinimum`
+    /// technically fits, but leaves the buttons flush against both edges and gives
+    /// the layout guard no margin — any later tweak would tip it straight into
+    /// overflow. This keeps a deliberate buffer.
+    static let metadataBreathingRoom: CGFloat = 8
+
+    /// Fraction of available width the album art may occupy.
+    ///
+    /// Chosen as the largest value clearing `transportRowMinimum` *plus*
+    /// `metadataBreathingRoom` across every Settings size combination. At the 640x210
+    /// default it costs the art about 4pt versus letting height bind alone —
+    /// imperceptible, and worth it for a guard with actual margin rather than one
+    /// sitting exactly on the boundary. Widening the panel insets or growing the
+    /// transport buttons will require re-deriving this; the layout check sweeps the
+    /// whole slider range and fails loudly if it no longer holds.
+    static let artWidthCap: CGFloat = 0.275
+
+    /// Album art (and, at `visualizerRatio`, the visualizer) fills the available
+    /// height, capped against width.
+    ///
+    /// Both are squares driven by height, flanking a metadata column that can't go
+    /// below `transportRowMinimum`. Sizing on height alone overflowed at narrow
+    /// "Expanded width" settings — at 420x210 the metadata column was left 12pt; at
+    /// 420x340 it went negative.
     static func artSize(availableHeight: CGFloat, availableWidth: CGFloat) -> CGFloat {
-        max(72, min(availableHeight, availableWidth * 0.3))
+        max(72, min(availableHeight, availableWidth * artWidthCap))
+    }
+
+    /// Width left for the metadata column once both squares and the gaps are taken.
+    static func metadataWidth(availableWidth: CGFloat, artSize: CGFloat) -> CGFloat {
+        availableWidth - artSize - columnSpacing * 2 - artSize * visualizerRatio
     }
 }
 
@@ -36,7 +80,7 @@ struct NowPlayingView: View {
             GeometryReader { proxy in
                 let artSize = NowPlayingLayout.artSize(availableHeight: proxy.size.height,
                                                        availableWidth: proxy.size.width)
-                HStack(alignment: .center, spacing: 18) {
+                HStack(alignment: .center, spacing: NowPlayingLayout.columnSpacing) {
                     artwork
                         .frame(width: artSize, height: artSize)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -54,7 +98,7 @@ struct NowPlayingView: View {
                         CircularVisualizerView(
                             levels: vm.audioVisualizer.bars,
                             isLive: vm.audioVisualizer.isCapturing && vm.audioVisualizer.hasSignal,
-                            size: artSize * 0.92
+                            size: artSize * NowPlayingLayout.visualizerRatio
                         )
                     }
                 }
@@ -93,14 +137,23 @@ struct NowPlayingView: View {
 
             Spacer(minLength: 10)
 
-            HStack(spacing: 10) {
-                transportButton("backward.fill", diameter: 30, glyph: 12) {
+            // `.firstTextBaseline` and friends would align on glyph metrics, which
+            // differ per symbol; `.center` keeps the three circles concentric on one
+            // horizontal axis regardless of the differing diameters.
+            HStack(alignment: .center, spacing: NowPlayingLayout.buttonSpacing) {
+                transportButton("backward.fill",
+                                diameter: NowPlayingLayout.smallButtonDiameter,
+                                glyph: 13) {
                     vm.nowPlaying.previousTrack()
                 }
-                transportButton(info.isPlaying ? "pause.fill" : "play.fill", diameter: 38, glyph: 15) {
+                transportButton(info.isPlaying ? "pause.fill" : "play.fill",
+                                diameter: NowPlayingLayout.largeButtonDiameter,
+                                glyph: 16) {
                     vm.nowPlaying.togglePlayPause()
                 }
-                transportButton("forward.fill", diameter: 30, glyph: 12) {
+                transportButton("forward.fill",
+                                diameter: NowPlayingLayout.smallButtonDiameter,
+                                glyph: 13) {
                     vm.nowPlaying.nextTrack()
                 }
             }
@@ -130,6 +183,10 @@ struct NowPlayingView: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: glyph, weight: .medium))
+                // A play triangle's visual mass sits left of its geometric centre, so
+                // centring it mathematically makes it look shifted left. Every other
+                // transport glyph here is symmetric and needs no nudge.
+                .offset(x: symbol == "play.fill" ? 1.5 : 0)
         }
         .buttonStyle(.outline(diameter: diameter))
     }

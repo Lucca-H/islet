@@ -29,15 +29,30 @@ struct OutlineButtonStyle: ButtonStyle {
                     // artwork without becoming a solid button.
                     shape.fill(Color.white.opacity(configuration.isPressed ? 0.18 : (isHovering ? 0.10 : 0.04)))
                 }
-                .overlay {
-                    shape.stroke(Color.white.opacity(isHovering ? 0.55 : 0.28), lineWidth: 1)
-                }
+                .overlay { border }
                 .foregroundStyle(.white.opacity(configuration.isPressed ? 0.7 : 1))
                 .scaleEffect(configuration.isPressed ? 0.94 : 1)
                 .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
                 .animation(.easeOut(duration: 0.12), value: isHovering)
                 .onHover { isHovering = $0 }
                 .contentShape(shape)
+        }
+
+        /// Branches on the concrete shape rather than going through `shape` so it can
+        /// use `.strokeBorder`, which `AnyShape` can't offer (it isn't
+        /// `InsettableShape`). That matters here: `.strokeBorder` insets the line to
+        /// sit fully *inside* the frame, whereas plain `.stroke` centres it on the
+        /// path and lets half the width bleed past the button's own bounds — visible
+        /// as slight misalignment once the line is thick enough to notice.
+        @ViewBuilder
+        private var border: some View {
+            let color = Color.white.opacity(isHovering ? 0.6 : 0.34)
+            if isCircular {
+                Circle().strokeBorder(color, lineWidth: 1.5)
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(color, lineWidth: 1.5)
+            }
         }
 
         private var shape: AnyShape {
@@ -71,7 +86,8 @@ struct OutlineTextButtonStyle: ButtonStyle {
                     Capsule().fill(Color.white.opacity(configuration.isPressed ? 0.16 : (isHovering ? 0.09 : 0.03)))
                 }
                 .overlay {
-                    Capsule().stroke(Color.white.opacity(isHovering ? 0.5 : 0.25), lineWidth: 1)
+                    // strokeBorder, not stroke — keeps the line inside the bounds.
+                    Capsule().strokeBorder(Color.white.opacity(isHovering ? 0.55 : 0.3), lineWidth: 1.5)
                 }
                 .foregroundStyle(.white.opacity(configuration.isPressed ? 0.7 : 0.85))
                 .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
