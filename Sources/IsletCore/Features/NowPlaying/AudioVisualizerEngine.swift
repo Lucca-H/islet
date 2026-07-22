@@ -31,10 +31,7 @@ final class AudioVisualizerEngine: ObservableObject {
 
     /// Whether real audio is currently coming through, with a short hold so brief
     /// gaps between tracks (or quiet passages) don't make the bars flicker away.
-    ///
-    /// This is the *only* way Islet can tell that browser/web audio is playing —
-    /// `NowPlayingManager` structurally can't see browsers, but ScreenCaptureKit
-    /// captures whatever is actually making sound.
+    /// Drives the "Capturing — audio detected" vs "no audio right now" status text.
     @Published private(set) var hasSignal = false
 
     /// Why the last capture attempt failed, surfaced in Settings. Without this the
@@ -52,9 +49,21 @@ final class AudioVisualizerEngine: ObservableObject {
     /// terminal (`defaults read com.dynamicisland.islet visualizerDebugStatus`).
     /// `os_log` isn't readable back without extra permissions on this setup, and a
     /// silently-dead visualizer gives no other outward signal to debug from.
+    private static let debugLogKey = "visualizerDebugLog"
+    private static let debugLogCapacity = 20
+
+    /// Appends rather than overwrites. A single-key "latest status" version of this
+    /// briefly existed and was actively misleading: several events can fire within
+    /// the same second (raw format, then first processed buffer), each overwriting
+    /// the last before `defaults read` between them ever got a chance to see it.
     private func recordDebug(_ message: String) {
         let stamp = ISO8601DateFormatter().string(from: Date())
-        UserDefaults.standard.set("[\(stamp)] \(message)", forKey: "visualizerDebugStatus")
+        var entries = UserDefaults.standard.stringArray(forKey: Self.debugLogKey) ?? []
+        entries.append("[\(stamp)] \(message)")
+        if entries.count > Self.debugLogCapacity {
+            entries.removeFirst(entries.count - Self.debugLogCapacity)
+        }
+        UserDefaults.standard.set(entries, forKey: Self.debugLogKey)
         log.info("\(message, privacy: .public)")
     }
 
@@ -130,6 +139,9 @@ final class AudioVisualizerEngine: ObservableObject {
 
         output.onBands = { [weak self] bands in
             Task { @MainActor in self?.applyBands(bands) }
+        }
+        output.onRawFormatLogged = { [weak self] message in
+            Task { @MainActor in self?.recordDebug("raw format: \(message)") }
         }
 
         Task {
@@ -239,6 +251,12 @@ final class AudioVisualizerEngine: ObservableObject {
 /// handful of smoothed frequency-band levels via FFT.
 private final class AudioOutput: NSObject, SCStreamOutput, @unchecked Sendable {
     var onBands: (([CGFloat]) -> Void)?
+    /// Fires once, with a snapshot of the raw format/data before any of this
+    /// class's own processing (mixdown, windowing, FFT) touches it — isolates
+    /// whether zeroed output originates upstream (silent/garbage capture) or in
+    /// this pipeline.
+    var onRawFormatLogged: ((String) -> Void)?
+    private var hasLoggedRawFormat = false
 
     private let fftSize = 1024
     private let fftSetup: FFTSetup
@@ -278,6 +296,17 @@ private final class AudioOutput: NSObject, SCStreamOutput, @unchecked Sendable {
         let floatCount = length / MemoryLayout<Float>.size
 
         dataPointer.withMemoryRebound(to: Float.self, capacity: floatCount) { floats in
+            if !hasLoggedRawFormat {
+                hasLoggedRawFormat = true
+                let nonInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+                let rawPeak = (0..<floatCount).reduce(Float(0)) { max($0, abs(floats[$1])) }
+                let sample = (0..<min(8, floatCount)).map { floats[$0] }
+                onRawFormatLogged?(
+                    "channels=\(channels) rate=\(asbd.mSampleRate) nonInterleaved=\(nonInterleaved) " +
+                    "bytesPerFrame=\(asbd.mBytesPerFrame) floatCount=\(floatCount) rawPeak=\(rawPeak) " +
+                    "first8=\(sample)"
+                )
+            }
             // Mix down to mono regardless of the channel layout.
             var frameIndex = 0
             var i = 0

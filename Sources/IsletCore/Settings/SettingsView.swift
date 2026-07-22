@@ -155,6 +155,8 @@ private struct AudioVisualizerSettingsRow: View {
                         .controlSize(.small)
                 }
             }
+
+            DiagnosticLogDisclosure()
         }
     }
 
@@ -170,6 +172,49 @@ private struct AudioVisualizerSettingsRow: View {
         }
         if engine.isAuthorized { return "Authorized — starting…" }
         return "Not authorized — checking again automatically"
+    }
+}
+
+/// A copyable diagnostic log for the audio capture pipeline. Exists so a debugging
+/// round trip is "open Settings, copy, paste" instead of "open Terminal, run
+/// `defaults read`" — collapsed by default since it's only useful when something's
+/// actually wrong.
+private struct DiagnosticLogDisclosure: View {
+    @State private var isExpanded = false
+
+    private var entries: [String] {
+        UserDefaults.standard.stringArray(forKey: "visualizerDebugLog") ?? []
+    }
+
+    var body: some View {
+        DisclosureGroup("Diagnostic log (\(entries.count))", isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 4) {
+                if entries.isEmpty {
+                    Text("No entries yet.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                                Text(entry)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 140)
+
+                    Button("Copy Log") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(entries.joined(separator: "\n"), forType: .string)
+                    }
+                    .controlSize(.small)
+                }
+            }
+            .padding(.top, 4)
+        }
+        .font(.footnote)
     }
 }
 
