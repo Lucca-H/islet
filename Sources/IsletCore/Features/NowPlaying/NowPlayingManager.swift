@@ -16,20 +16,21 @@ struct NowPlayingInfo: Equatable {
     var trackKey: String { "\(sourceBundleID)|\(title)|\(album)|\(artist)" }
 }
 
-/// Detects and controls media playback.
+/// Detects and controls playback in **Apple Music and Spotify**.
 ///
-/// Primary feed is `DistributedNotificationCenter`: Music and Spotify each post a
-/// notification carrying full metadata on every playback change. That is push-based,
-/// instant, needs no entitlement, and triggers no permission prompt.
+/// Primary feed is `DistributedNotificationCenter`: both apps post a notification
+/// carrying full metadata on every playback change. That is push-based, instant,
+/// needs no entitlement, and triggers no permission prompt.
 ///
 /// AppleScript fills the gaps the notification feed can't cover — reading state at
 /// launch (notifications only fire on *change*), fetching artwork, and sending
-/// transport commands. Those do require Automation permission, so metadata keeps
-/// working even if the user declines it.
+/// transport commands.
 ///
-/// `MediaRemoteBridge` is tried first when available: it would additionally cover
-/// browser/web audio. On macOS 26 it returns nothing unless the caller is an
-/// Apple-signed binary, so in practice it self-disables after a few empty replies.
+/// Browser/web audio is deliberately out of scope. The only system-wide API for it
+/// (`MediaRemote`) is gated to Apple-signed callers on macOS 26 — verified directly,
+/// it returns an empty dictionary for any third-party build — so supporting it was
+/// never actually possible, and the dead private-API bridge has been removed rather
+/// than left in pretending otherwise.
 @MainActor
 final class NowPlayingManager: ObservableObject {
     @Published private(set) var info: NowPlayingInfo?
@@ -37,18 +38,11 @@ final class NowPlayingManager: ObservableObject {
     @Published private(set) var sourceIcon: NSImage?
 
     private let log = Logger(subsystem: "com.dynamicisland.islet", category: "NowPlaying")
-    private let bridge = MediaRemoteBridge.shared
     private let separator = "\u{001F}"
 
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var isEnabled = false
-
-    /// MediaRemote is gated to Apple-signed callers; stop asking after this many
-    /// consecutive empty replies so we don't burn a round-trip every refresh.
-    private var mediaRemoteEmptyReplies = 0
-    private var mediaRemoteUsable = true
-    private static let mediaRemoteGiveUpThreshold = 3
 
     private var artworkTrackKey: String?
 
@@ -104,16 +98,6 @@ final class NowPlayingManager: ObservableObject {
     func previousTrack()   { sendCommand("previous track") }
 
     private func sendCommand(_ command: String) {
-        // Prefer MediaRemote when it actually works (covers browsers too).
-        if mediaRemoteUsable, bridge.isAvailable {
-            let sent: Bool
-            switch command {
-            case "playpause":     sent = bridge.send(.togglePlayPause)
-            case "next track":    sent = bridge.send(.nextTrack)
-            default:              sent = bridge.send(.previousTrack)
-            }
-            if sent { scheduleRefresh(); return }
-        }
         guard let app = activeApp else { return }
         let script = "if application \"\(app.rawValue)\" is running then tell application \"\(app.rawValue)\" to \(command)"
         Task.detached { _ = AppleScriptRunner.run(script) }
@@ -163,36 +147,11 @@ final class NowPlayingManager: ObservableObject {
         return Date().timeIntervalSince(lastNotificationAt) < Self.notificationTrustWindow
     }
 
-    // MARK: - Refresh (MediaRemote → AppleScript)
+    // MARK: - Refresh
 
     private func refresh() {
         guard isEnabled else { return }
-
-        if mediaRemoteUsable, bridge.isAvailable {
-            bridge.fetchSnapshot { [weak self] snapshot in
-                DispatchQueue.main.async {
-                    guard let self, self.isEnabled else { return }
-                    if let snapshot {
-                        self.mediaRemoteEmptyReplies = 0
-                        self.apply(NowPlayingInfo(
-                            title: snapshot.title, artist: snapshot.artist, album: snapshot.album,
-                            isPlaying: snapshot.isPlaying,
-                            sourceName: snapshot.sourceName ?? "Now Playing",
-                            sourceBundleID: snapshot.sourceBundleID ?? ""
-                        ), directArtwork: snapshot.artworkData)
-                    } else {
-                        self.mediaRemoteEmptyReplies += 1
-                        if self.mediaRemoteEmptyReplies >= Self.mediaRemoteGiveUpThreshold {
-                            self.mediaRemoteUsable = false
-                            self.log.info("MediaRemote returned no data; using the scriptable-app feed instead.")
-                        }
-                        self.refreshFromScriptableApps()
-                    }
-                }
-            }
-        } else {
-            refreshFromScriptableApps()
-        }
+        refreshFromScriptableApps()
     }
 
     private func refreshFromScriptableApps() {
@@ -231,7 +190,7 @@ final class NowPlayingManager: ObservableObject {
 
     // MARK: - Applying state
 
-    private func apply(_ new: NowPlayingInfo?, directArtwork: Data? = nil) {
+    private func apply(_ new: NowPlayingInfo?) {
         let wasPlaying = info?.isPlaying ?? false
         let previousKey = info?.trackKey
 
@@ -255,10 +214,6 @@ final class NowPlayingManager: ObservableObject {
         guard artworkTrackKey != new.trackKey else { return }
         artworkTrackKey = new.trackKey
 
-        if let directArtwork, let image = NSImage(data: directArtwork) {
-            artwork = image
-            return
-        }
         artwork = nil
         loadArtwork(for: new)
     }

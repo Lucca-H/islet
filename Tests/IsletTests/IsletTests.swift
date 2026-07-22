@@ -119,10 +119,20 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
 
 @MainActor
 @Test func audioVisualizerEngineDefaults() {
-    #expect(AudioVisualizerEngine.bandCount == 4)
+    #expect(AudioVisualizerEngine.bandCount >= 16)
     let engine = AudioVisualizerEngine.shared
     #expect(engine.bars.count == AudioVisualizerEngine.bandCount)
     #expect(engine.isCapturing == false)
+}
+
+/// The collapsed pill downsamples the full spectrum while the circular visualizer
+/// uses all of it — both driven by the same single FFT.
+@MainActor
+@Test func compactBarsDownsamplesToRequestedCount() {
+    let engine = AudioVisualizerEngine.shared
+    #expect(engine.compactBars(count: 4).count == 4)
+    #expect(engine.compactBars(count: 1).count == 1)
+    #expect(engine.compactBars(count: 0).isEmpty)
 }
 
 // MARK: NotchGeometry content-safe margin

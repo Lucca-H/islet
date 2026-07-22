@@ -168,21 +168,16 @@ private struct CollapsedNotchView: View {
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
 
-    /// True when we have actual track metadata (Music/Spotify).
-    private var hasTrack: Bool {
-        settings.nowPlayingEnabled && (vm.nowPlaying.info?.isPlaying ?? false)
-    }
-
-    /// True when *something* is audibly playing — including browser audio, which
-    /// only the visualizer can detect. Drives the bars, so web audio still shows
-    /// signs of life even though no metadata is available for it.
+    /// Islet tracks Apple Music and Spotify only, so playback state comes purely
+    /// from track metadata — no inferring "something is making noise" from raw
+    /// audio, which would light up for any browser tab or notification sound.
     private var isPlaying: Bool {
-        hasTrack || (settings.nowPlayingEnabled && vm.audioVisualizer.hasSignal)
+        settings.nowPlayingEnabled && (vm.nowPlaying.info?.isPlaying ?? false)
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            if settings.peekMediaArt, hasTrack {
+            if settings.peekMediaArt, isPlaying {
                 artwork
                     .frame(width: notchSize.height * 0.62, height: notchSize.height * 0.62)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
@@ -245,11 +240,16 @@ private struct PeekContentView: View {
 struct AudioBars: View {
     @EnvironmentObject var vm: NotchViewModel
 
+    /// The pill is only ~16pt wide, so the full 32-band spectrum is downsampled to
+    /// something legible at that size. The circular visualizer uses all of it.
+    private static let compactBandCount = 4
+
     var body: some View {
         Group {
             if vm.audioVisualizer.isCapturing {
+                let levels = vm.audioVisualizer.compactBars(count: Self.compactBandCount)
                 HStack(spacing: 2) {
-                    ForEach(Array(vm.audioVisualizer.bars.enumerated()), id: \.offset) { _, level in
+                    ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                         Capsule()
                             .fill(Color.white)
                             .frame(height: 3 + level * 13)
@@ -261,7 +261,7 @@ struct AudioBars: View {
                 TimelineView(.animation(minimumInterval: 0.12)) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
                     HStack(spacing: 2) {
-                        ForEach(0..<AudioVisualizerEngine.bandCount, id: \.self) { i in
+                        ForEach(0..<Self.compactBandCount, id: \.self) { i in
                             Capsule()
                                 .fill(Color.white)
                                 .frame(height: fakeBarHeight(index: i, time: t))

@@ -33,11 +33,9 @@ struct ExpandedNotchView: View {
                 SettingsWindowController.shared.show()
             } label: {
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .frame(width: 24, height: 24)
+                    .font(.system(size: 14, weight: .medium))
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.outline(diameter: 30))
             .help("Islet Settings")
         }
         .padding(.horizontal, 6)

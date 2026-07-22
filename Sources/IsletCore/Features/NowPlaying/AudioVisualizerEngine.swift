@@ -42,7 +42,10 @@ final class AudioVisualizerEngine: ObservableObject {
     private var lastSignalAt: Date?
     private var signalTimer: Timer?
 
-    nonisolated static let bandCount = 4
+    /// Enough bands for the circular visualizer to read as a detailed spectrum
+    /// rather than a few chunky blocks. The compact pill bars downsample this via
+    /// `compactBars(count:)`, so one FFT feeds both.
+    nonisolated static let bandCount = 32
     /// One instance app-wide: Settings shows live status (authorized? capturing?)
     /// from the exact same engine the notch is actually using, not a lookalike.
     static let shared = AudioVisualizerEngine()
@@ -146,6 +149,19 @@ final class AudioVisualizerEngine: ObservableObject {
         if (bands.max() ?? 0) > Self.signalThreshold {
             lastSignalAt = Date()
             if !hasSignal { hasSignal = true }
+        }
+    }
+
+    /// Average the full spectrum down to `count` buckets, for the compact collapsed
+    /// bars — one FFT drives both the detailed circular view and the mini bars.
+    func compactBars(count: Int) -> [CGFloat] {
+        guard count > 0, !bars.isEmpty else { return Array(repeating: 0, count: max(0, count)) }
+        let bucket = Double(bars.count) / Double(count)
+        return (0..<count).map { index in
+            let lower = Int(Double(index) * bucket)
+            let upper = min(bars.count, max(lower + 1, Int(Double(index + 1) * bucket)))
+            let slice = bars[lower..<upper]
+            return slice.reduce(0, +) / CGFloat(slice.count)
         }
     }
 

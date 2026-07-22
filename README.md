@@ -28,18 +28,21 @@ Hover the notch and it expands into a real **Liquid Glass** panel with three tab
 - Detects playback from **Apple Music** and **Spotify** via each app's
   `DistributedNotificationCenter` broadcast — push-based, instant, and requiring no
   permission prompt.
-- Album/cover art, title, artist, and source app, with
+- Large album art, title, artist, and source app, with outlined
   **play / pause / next / previous** controls.
-- When collapsed, the notch peeks the album art and a live audio-bars indicator —
-  optionally a **real frequency visualizer** of whatever's actually playing (Settings →
-  Notch → Audio visualizer). Off by default: it requires granting Screen & System Audio
-  Recording permission, the heaviest ask anywhere in Islet, so it's opt-in only.
+- An optional **circular spectrum visualizer** on the right, driven by a real 32-band
+  FFT of the audio actually playing (Settings → Notch → Audio visualizer). Off by
+  default: it requires granting Screen & System Audio Recording permission, the
+  heaviest ask anywhere in Islet, so it's opt-in only. Capture runs only while a track
+  is actually playing, so the system recording indicator isn't up any longer than
+  necessary.
+- When collapsed, the notch peeks the album art and a live audio-bars indicator.
 
-> **Browser/web audio is not supported.** The only system-wide API for it
+> **Browser/web audio is not supported, by design.** The only system-wide API for it
 > (`MediaRemote`) is gated to Apple-signed binaries on macOS 26 — verified directly:
 > identical code returns full data from Apple's own `swift-frontend` and an empty
-> dictionary from an ad-hoc-signed app bundle. Islet still attempts it first and will
-> light up automatically if it ever becomes available, then falls back.
+> dictionary from an ad-hoc-signed app bundle. Rather than ship a private-API
+> dependency that can never fire for a third-party build, Islet doesn't attempt it.
 
 ### 🗂 Drop Shelf
 - Drag any file onto the notch to stash it on a temporary shelf.

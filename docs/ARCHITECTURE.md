@@ -117,25 +117,25 @@ handling.
 
 ## Features
 
-- **NowPlayingManager** is layered, because the obvious approach doesn't work:
+- **NowPlayingManager** covers **Apple Music and Spotify only**, via two mechanisms:
 
-  1. **`MediaRemoteBridge` (attempted first, usually unavailable).** A `dlopen`/`dlsym`
-     wrapper around the private `MediaRemote.framework`. It *would* give system-wide
-     playback including browser/web audio — but on macOS 26 it only returns data to
-     Apple-signed binaries. Verified directly: identical code returns 30 populated keys
-     when run inside Apple's `swift-frontend`, and an empty dictionary from an
-     ad-hoc-signed `.app` bundle, at the same instant with the same track playing.
-     Neither entitlements nor bundling changes this. The bridge self-disables after
-     three empty replies so it costs nothing, and would light up automatically if a
-     build ever gains access.
-  2. **Distributed notifications (the real backbone).** Music and Spotify each post a
+  1. **Distributed notifications (the backbone).** Both apps post a
      `DistributedNotificationCenter` notification on every playback change, carrying
      `Name` / `Artist` / `Album` / `Player State` in `userInfo`. This needs no
      entitlement and triggers no permission prompt, and it's push-based, so updates
      are instant.
-  3. **AppleScript (gap-filler).** Notifications only fire on *change*, so AppleScript
-     reads state at launch, fetches artwork, and sends transport commands. These need
-     Automation permission; if the user declines, metadata still flows from step 2.
+  2. **AppleScript (gap-filler).** Notifications only fire on *change*, so AppleScript
+     reads state at launch, fetches artwork, and sends transport commands.
+
+  **Browser/web audio is deliberately out of scope.** The only system-wide API for it
+  is the private `MediaRemote.framework`, which on macOS 26 returns data solely to
+  Apple-signed callers — verified directly: identical code returned 30 populated keys
+  inside Apple's `swift-frontend` and an empty dictionary from an ad-hoc-signed `.app`
+  bundle, at the same instant with the same track playing, with neither entitlements
+  nor proper bundling changing it. A `MediaRemoteBridge` that tried it first and
+  self-disabled after three empty replies used to live here; it was deleted rather
+  than kept as a dependency on a private API that could never actually fire, and its
+  presence made the layering look more capable than it was.
 
   Because an AppleScript poll returns empty when Automation is denied, an empty poll
   never clears state the notification feed recently supplied (`notificationTrustWindow`).

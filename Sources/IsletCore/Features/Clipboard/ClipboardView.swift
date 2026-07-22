@@ -42,8 +42,7 @@ struct ClipboardView: View {
                 .font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
             Spacer()
             Button("Clear") { vm.clipboard.clear() }
-                .buttonStyle(.glass)
-                .controlSize(.small)
+                .buttonStyle(.outlineText)
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.7))
         }

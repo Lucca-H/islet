@@ -136,16 +136,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         updateAudioVisualizerState()
     }
 
-    /// Deliberately *not* gated on `nowPlaying.info?.isPlaying`.
+    /// Capture only while a tracked player is actually playing.
     ///
-    /// That gate looked reasonable but was backwards: `NowPlayingManager` only ever
-    /// resolves Music/Spotify, so anything playing in a browser left the visualizer
-    /// switched off — even though ScreenCaptureKit captures all system audio and is
-    /// the one mechanism that *can* see browser audio. Gating the capable feature
-    /// behind the incapable one meant web audio showed nothing at all.
-    ///
-    /// The cost of running whenever enabled is that macOS keeps its screen-recording
-    /// indicator up for as long as the toggle is on; that's disclosed in Settings.
+    /// This gate was briefly removed while Islet still tried to cover browser audio —
+    /// back then it wrongly switched the visualizer off for the one source only
+    /// ScreenCaptureKit could see. Now that Now Playing is deliberately Music/Spotify
+    /// only, tying capture to real playback is both correct and better behaved: the
+    /// screen-recording indicator stays off whenever music isn't playing, instead of
+    /// for the entire time the feature is enabled.
     ///
     /// `AudioVisualizerEngine.start()` silently no-ops if permission isn't granted
     /// yet — and nothing was ever calling it *again*. If the toggle was already on
@@ -154,7 +152,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// go grant it in System Settings), that one attempt already failed and nothing
     /// retried. `retryTimer` keeps trying at a low rate until it actually succeeds.
     private func updateAudioVisualizerState() {
-        let shouldRun = settings.audioVisualizerEnabled && settings.nowPlayingEnabled
+        let shouldRun = settings.audioVisualizerEnabled
+            && settings.nowPlayingEnabled
+            && (nowPlaying.info?.isPlaying ?? false)
         if shouldRun {
             audioVisualizer.start()
             startAudioVisualizerRetryLoopIfNeeded()

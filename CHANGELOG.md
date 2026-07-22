@@ -3,6 +3,37 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.0-beta.5] — 2026-07-21
+
+### Changed
+- **Now Playing is Apple Music and Spotify only.** Browser/web audio support is
+  dropped outright rather than half-present: the private `MediaRemoteBridge` — which
+  could never return data for a third-party build on macOS 26 — has been **deleted**,
+  along with the "show bars for any detected audio" fallback. Islet no longer depends
+  on a private API at all for Now Playing, and no longer lights up for arbitrary
+  browser tabs or notification sounds.
+- **Buttons are outlined rather than filled.** The system `.glass` style filled each
+  control's whole background, which competed with the album art beside it. New
+  `OutlineButtonStyle` / `OutlineTextButtonStyle` use a thin stroke, brightening on
+  hover and dimming on press instead of swapping background colour.
+- **Settings button enlarged** (30pt, from 24pt).
+- **Album art enlarged** — up to 140pt from 96pt, and now sized from the actual
+  available height, so a smaller "Expanded height" setting shrinks it instead of
+  overflowing the panel.
+- **Now Playing relaid out** into three balanced columns: art, track identity +
+  transport controls, and the visualizer.
+- Audio capture again runs only while a track is actually playing. That gate was
+  briefly removed while browser support was still being attempted (where it wrongly
+  disabled the one thing that *could* see web audio); with Now Playing scoped to
+  Music/Spotify it's correct again, and keeps the screen-recording indicator off
+  whenever music isn't playing.
+
+### Added
+- **Circular spectrum visualizer** in the expanded Now Playing panel — one radial bar
+  per frequency band, bass at 12 o'clock sweeping clockwise through treble. Band count
+  raised 4 → 32 for real detail; the collapsed pill's mini bars downsample the same
+  single FFT via `compactBars(count:)` rather than running a second analysis.
+
 ## [0.1.0-beta.4] — 2026-07-21
 
 ### Fixed

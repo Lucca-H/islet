@@ -1,54 +1,92 @@
 import SwiftUI
 
-/// Expanded Now Playing panel: artwork, track metadata, and transport controls.
+/// Expanded Now Playing panel.
+///
+/// Three columns, left to right: large album art, the track's identity and transport
+/// controls, and a circular spectrum visualizer. The metadata column is the flexible
+/// one — art and visualizer keep fixed square footprints so the layout stays balanced
+/// as the notch width setting changes.
 struct NowPlayingView: View {
     @EnvironmentObject var vm: NotchViewModel
+    @EnvironmentObject var settings: SettingsStore
 
     private var info: NowPlayingInfo? { vm.nowPlaying.info }
 
     var body: some View {
         if let info {
-            HStack(spacing: 16) {
-                artwork
-                    .frame(width: 96, height: 96)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+            // Sized from the actual available height rather than a fixed constant, so
+            // a smaller "Expanded height" setting (or the notch inset on real
+            // hardware) shrinks the art instead of overflowing the panel.
+            GeometryReader { proxy in
+                let artSize = max(72, min(140, proxy.size.height))
+                HStack(alignment: .center, spacing: 18) {
+                    artwork
+                        .frame(width: artSize, height: artSize)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.45), radius: 12, y: 5)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        if let icon = vm.nowPlaying.sourceIcon {
-                            Image(nsImage: icon).resizable().frame(width: 11, height: 11)
-                        }
-                        Text(info.sourceName.uppercased())
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .tracking(1.2)
-                    }
+                    metadata(info, height: artSize)
 
-                    Text(info.title)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .tracking(-0.2)
-                        .lineLimit(1)
-                    Text(info.artist)
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .lineLimit(1)
-
-                    Spacer(minLength: 6)
-
-                    HStack(spacing: 16) {
-                        transportButton("backward.fill") { vm.nowPlaying.previousTrack() }
-                        transportButton(info.isPlaying ? "pause.fill" : "play.fill", size: 20) {
-                            vm.nowPlaying.togglePlayPause()
-                        }
-                        transportButton("forward.fill") { vm.nowPlaying.nextTrack() }
+                    if settings.audioVisualizerEnabled {
+                        CircularVisualizerView(
+                            levels: vm.audioVisualizer.bars,
+                            isLive: vm.audioVisualizer.isCapturing && vm.audioVisualizer.hasSignal
+                        )
+                        .frame(width: artSize * 0.92, height: artSize * 0.92)
                     }
                 }
-                Spacer(minLength: 0)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .leading)
             }
         } else {
             emptyState
         }
+    }
+
+    private func metadata(_ info: NowPlayingInfo, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 5) {
+                if let icon = vm.nowPlaying.sourceIcon {
+                    Image(nsImage: icon).resizable().frame(width: 12, height: 12)
+                }
+                Text(info.sourceName.uppercased())
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .tracking(1.3)
+            }
+
+            Spacer(minLength: 6)
+
+            Text(info.title)
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .tracking(-0.3)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Text(info.artist)
+                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+                .padding(.top, 2)
+
+            Spacer(minLength: 10)
+
+            HStack(spacing: 10) {
+                transportButton("backward.fill", diameter: 30, glyph: 12) {
+                    vm.nowPlaying.previousTrack()
+                }
+                transportButton(info.isPlaying ? "pause.fill" : "play.fill", diameter: 38, glyph: 15) {
+                    vm.nowPlaying.togglePlayPause()
+                }
+                transportButton("forward.fill", diameter: 30, glyph: 12) {
+                    vm.nowPlaying.nextTrack()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: height, alignment: .leading)
     }
 
     @ViewBuilder
@@ -56,25 +94,32 @@ struct NowPlayingView: View {
         if let art = vm.nowPlaying.artwork {
             Image(nsImage: art).resizable().aspectRatio(contentMode: .fill)
         } else {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-                .overlay(Image(systemName: "music.note").font(.system(size: 28)).foregroundStyle(.white.opacity(0.4)))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.07))
+                .overlay(
+                    Image(systemName: "music.note")
+                        .font(.system(size: 34))
+                        .foregroundStyle(.white.opacity(0.35))
+                )
         }
     }
 
-    private func transportButton(_ symbol: String, size: CGFloat = 14, action: @escaping () -> Void) -> some View {
+    private func transportButton(_ symbol: String,
+                                 diameter: CGFloat,
+                                 glyph: CGFloat,
+                                 action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: size + 14, height: size + 14)
+                .font(.system(size: glyph, weight: .medium))
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.outline(diameter: diameter))
     }
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "music.note.list").font(.system(size: 26)).foregroundStyle(.white.opacity(0.35))
+            Image(systemName: "music.note.list")
+                .font(.system(size: 28))
+                .foregroundStyle(.white.opacity(0.35))
             Text("Nothing playing")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.6))

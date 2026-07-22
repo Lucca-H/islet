@@ -144,10 +144,15 @@ public func runIsletSelfChecks() -> Int {
 
     print("AudioVisualizerEngine")
     do {
-        check(AudioVisualizerEngine.bandCount == 4, "bandCount matches the UI's expected bar count")
+        check(AudioVisualizerEngine.bandCount >= 16, "enough bands for a detailed circular spectrum")
         let engine = AudioVisualizerEngine.shared
         check(engine.bars.count == AudioVisualizerEngine.bandCount, "starts with one level per band")
         check(!engine.isCapturing, "not capturing until explicitly started")
+        // The collapsed pill downsamples the full spectrum; the circular view uses
+        // all of it. Both must come from the same single FFT.
+        check(engine.compactBars(count: 4).count == 4, "compactBars downsamples to the requested bucket count")
+        check(engine.compactBars(count: 1).count == 1, "compactBars handles a single bucket")
+        check(engine.compactBars(count: 0).isEmpty, "compactBars handles a zero bucket count without crashing")
     }
 
     print(failures == 0 ? "\nAll checks passed ✅" : "\n\(failures) check(s) failed ❌")

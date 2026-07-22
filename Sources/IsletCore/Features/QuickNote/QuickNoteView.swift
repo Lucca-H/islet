@@ -58,8 +58,7 @@ struct QuickNoteView: View {
             }
             Spacer()
             Button("Clear") { vm.quickNote.clear() }
-                .buttonStyle(.glass)
-                .controlSize(.small)
+                .buttonStyle(.outlineText)
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.7))
                 .disabled(vm.quickNote.text.isEmpty)
