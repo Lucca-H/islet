@@ -24,7 +24,7 @@ struct CircularVisualizerView: View {
     /// bars technically move but read as barely alive. This multiplies the level
     /// before it's mapped to a length (clamped, so peaks pin at full height rather
     /// than overflow the ring), which is what gives the spectrum visible punch.
-    private let peakGain: CGFloat = 2.6
+    private let peakGain: CGFloat = 2.1
 
     private var ringRadius: CGFloat { size * 0.27 }
     private var maxBarLength: CGFloat { size * 0.22 }
