@@ -33,6 +33,56 @@ All notable changes to Islet are documented here. This project follows
   per frequency band, bass at 12 o'clock sweeping clockwise through treble. Band count
   raised 4 → 32 for real detail; the collapsed pill's mini bars downsample the same
   single FFT via `compactBars(count:)` rather than running a second analysis.
+- **Diagnostics for the audio pipeline.** Capture failures were entirely silent —
+  `SCStream` errors only reached `os_log`, which isn't readable back without extra
+  permissions, so the sole symptom was dead bars. The engine now records what it's
+  doing to `UserDefaults` (`visualizerDebugLog`), surfaced in Settings → Notch →
+  Audio visualizer with a Copy button, plus a *Reset Permission & Quit Islet…* button
+  for the ad-hoc-signing permission problem below. `IsletProbe` also gained
+  `--visualizer`, which prints live frequency-band levels.
+
+### Fixed
+- **The audio visualizer never started at all.** `AppDelegate` subscribed to
+  `nowPlaying.$info`, mapped it to `isPlaying`, then discarded that value and re-read
+  `nowPlaying.info` inside the sink. `@Published` emits in `willSet`, so the stored
+  property still held the *previous* value: at the exact moment playback began the
+  gate read "not playing" and called `stop()` instead of `start()`. It could never
+  have worked.
+- **Capture stalled silently after a minute or two.** `SCStream` was created with
+  `delegate: nil`, so a session dying internally was invisible — `isCapturing` stayed
+  stuck at `true` with nothing to catch or restart it. There's now a real
+  `SCStreamDelegate`, plus an independent buffer-arrival watchdog that forces a
+  restart if no audio arrives for 4s (some failure modes never call the delegate at
+  all). The retry loop also no longer retires itself on first success, which would
+  have left a failed watchdog restart with nothing to recover it.
+- **Circular visualizer bars didn't sit on the ring.** They were positioned manually
+  inside a `GeometryReader` via `.position()`, putting bars and ring in subtly
+  different coordinate spaces. Now uses the standard radial pattern — lay out centred,
+  `.offset` outward, then `.rotationEffect` — which is exact because `.offset` leaves
+  the layout frame centred for the rotation to pivot on.
+- **Clipboard image thumbnails overflowed their row**, painting over the adjacent
+  label. `.clipShape` was applied before the `.frame`, so a copied screenshot was
+  scaled to its natural size, clipped there, and only then given a 26pt layout frame.
+- **Now Playing could overflow at narrow widths.** Album art and the visualizer are
+  both squares sized from panel *height*, flanking a metadata column whose transport
+  row can't shrink; with no width term, the Settings sliders could collapse it (at
+  420×210 the metadata column got 12pt; at 420×340 it went negative). Art is now
+  capped against width too, and the panel/layout constants are shared with a
+  regression check that sweeps the entire slider range.
+- Transport button outlines used `.stroke`, which centres the line on the path and
+  lets half its width bleed outside the button's bounds — visible as slight
+  misalignment. Now `.strokeBorder`. `play.fill` is also nudged 1.5pt right, since a
+  play triangle's visual mass sits left of its geometric centre.
+- Footer rows (item count / last-edited plus a button) floated too far above the
+  panel's bottom edge; the bottom inset is now a deliberately tighter 10pt.
+
+### Known limitations
+- **Screen Recording permission does not survive a rebuild.** Islet is ad-hoc signed,
+  so it has no stable code identity — macOS pins the grant to the exact binary hash,
+  and the leftover "Islet" row in System Settings refers to a build that no longer
+  exists (toggling it there does nothing). Use the *Reset Permission & Quit Islet…*
+  button, or `tccutil reset ScreenCapture com.dynamicisland.islet`. A Developer ID
+  signature would remove this entirely.
 
 ## [0.1.0-beta.4] — 2026-07-21
 
@@ -55,6 +105,9 @@ All notable changes to Islet are documented here. This project follows
   Automation permission was also confirmed *not* to be gated for AppleScript spawned
   via `/usr/bin/osascript` on this setup — a completely fresh, never-before-seen app
   queried Spotify's current track instantly with no prompt at all.
+
+[0.1.0-beta.5]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.5
+[0.1.0-beta.4]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.4
 
 ## [0.1.0-beta.3] — 2026-07-21
 
