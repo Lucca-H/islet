@@ -137,6 +137,24 @@ private struct AudioVisualizerSettingsRow: View {
                         .controlSize(.small)
                 }
             }
+
+            if let error = engine.lastError {
+                Text("Last error: \(error)")
+                    .font(.footnote)
+                    .foregroundStyle(.red.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !engine.isAuthorized {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Already enabled Islet in System Settings but still seeing this? Islet is ad-hoc signed, so its code signature changes every time it's rebuilt — and macOS ties the permission to that signature. The existing “Islet” entry belongs to an older build and can't be fixed by toggling it. Resetting removes it so the next launch can ask again.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Reset Permission & Quit Islet…") { engine.resetPermissionAndQuit() }
+                        .controlSize(.small)
+                }
+            }
         }
     }
 

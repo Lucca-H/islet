@@ -37,10 +37,15 @@ final class AudioVisualizerEngine: ObservableObject {
     /// captures whatever is actually making sound.
     @Published private(set) var hasSignal = false
 
+    /// Why the last capture attempt failed, surfaced in Settings. Without this the
+    /// only symptom is silent dead bars, which is impossible to diagnose.
+    @Published private(set) var lastError: String?
+
     private static let signalThreshold: CGFloat = 0.02
     private static let signalHold: TimeInterval = 1.5
     private var lastSignalAt: Date?
     private var signalTimer: Timer?
+    private var hasRequestedAccess = false
 
     /// Enough bands for the circular visualizer to read as a detailed spectrum
     /// rather than a few chunky blocks. The compact pill bars downsample this via
@@ -72,36 +77,54 @@ final class AudioVisualizerEngine: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    /// Clear Islet's own Screen Recording grant, then quit so the next launch
+    /// re-prompts from scratch.
+    ///
+    /// Needed because Islet is ad-hoc signed: its code hash changes on every rebuild,
+    /// and macOS pins the grant to that hash. The stale row left behind in System
+    /// Settings still says "Islet" and still looks enabled, but no longer applies to
+    /// the running build — and toggling it there doesn't fix it, because the entry
+    /// refers to a binary that no longer exists. Resetting is the only way out short
+    /// of a stable Developer ID signature.
+    func resetPermissionAndQuit() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", "ScreenCapture", "com.dynamicisland.islet"]
+        try? process.run()
+        process.waitUntilExit()
+        NSApp.terminate(nil)
+    }
+
     func start() {
-        // CGRequestScreenCaptureAccess (not just preflighting) on every attempt.
-        // Preflighting only *checks* status; requesting is what actually registers
-        // Islet in TCC and shows the system prompt the first time. The Settings
-        // toggle's onChange also calls requestAccess(), but onChange only fires on
-        // a transition — if audioVisualizerEnabled was already true from a previous
-        // session, opening Settings and seeing it already on triggers nothing, so
-        // that path alone could leave Islet never actually registered for a given
-        // build. Requesting here means every retry tick closes that gap too.
-        isAuthorized = requestAccess()
+        // Only *request* (which prompts and registers Islet with TCC) once per run;
+        // preflight is enough afterwards. The Settings toggle's onChange also calls
+        // requestAccess(), but onChange only fires on a transition — if
+        // audioVisualizerEnabled was already true from a previous session, opening
+        // Settings and seeing it already on triggers nothing, so that path alone
+        // could leave Islet never registered at all. Doing it here on the first
+        // attempt closes that gap without re-prompting every retry tick.
+        if hasRequestedAccess {
+            isAuthorized = CGPreflightScreenCaptureAccess()
+        } else {
+            hasRequestedAccess = true
+            isAuthorized = requestAccess()
+        }
         guard !isCapturing, !isStarting, isAuthorized else { return }
         isStarting = true
+        lastError = nil
 
         output.onBands = { [weak self] bands in
             Task { @MainActor in self?.applyBands(bands) }
         }
 
-        // Expires `hasSignal` once audio actually stops; the sample callback can
-        // only ever tell us sound *is* present, never that it went away.
-        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.expireSignalIfStale() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        signalTimer = timer
-
         Task {
             do {
                 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
                 guard let display = content.displays.first else {
-                    await MainActor.run { self.isStarting = false }
+                    await MainActor.run {
+                        self.isStarting = false
+                        self.lastError = "No display available to capture from."
+                    }
                     return
                 }
 
@@ -122,12 +145,30 @@ final class AudioVisualizerEngine: ObservableObject {
                     self.stream = stream
                     self.isCapturing = true
                     self.isStarting = false
+                    self.lastError = nil
+                    self.startSignalTimer()
                 }
             } catch {
                 self.log.error("Audio visualizer failed to start: \(error.localizedDescription, privacy: .public)")
-                await MainActor.run { self.isStarting = false }
+                await MainActor.run {
+                    self.isStarting = false
+                    self.lastError = error.localizedDescription
+                }
             }
         }
+    }
+
+    /// Expires `hasSignal` once audio actually stops; the sample callback can only
+    /// ever tell us sound *is* present, never that it went away. Created only once
+    /// capture genuinely succeeds — an earlier version made it up-front on every
+    /// `start()`, so each failed retry (every 2s) stacked another live timer.
+    private func startSignalTimer() {
+        signalTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.expireSignalIfStale() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        signalTimer = timer
     }
 
     func stop() {

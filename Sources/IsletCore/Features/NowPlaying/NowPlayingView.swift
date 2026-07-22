@@ -34,9 +34,9 @@ struct NowPlayingView: View {
                     if settings.audioVisualizerEnabled {
                         CircularVisualizerView(
                             levels: vm.audioVisualizer.bars,
-                            isLive: vm.audioVisualizer.isCapturing && vm.audioVisualizer.hasSignal
+                            isLive: vm.audioVisualizer.isCapturing && vm.audioVisualizer.hasSignal,
+                            size: artSize * 0.92
                         )
-                        .frame(width: artSize * 0.92, height: artSize * 0.92)
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .leading)
