@@ -16,6 +16,33 @@ struct NowPlayingInfo: Equatable {
     var trackKey: String { "\(sourceBundleID)|\(title)|\(album)|\(artist)" }
 }
 
+/// Where playback is in the current track.
+///
+/// Holds the moment `elapsed` was measured rather than a live position, because the
+/// source is a 3-second AppleScript poll — far too coarse to animate from directly.
+/// `elapsed(at:)` extrapolates between samples, which is what makes a smooth bar out
+/// of infrequent readings. Only extrapolates while playing; a paused track sits still.
+struct PlaybackProgress: Equatable {
+    var elapsed: TimeInterval
+    var duration: TimeInterval
+    var sampledAt: Date
+    var isPlaying: Bool
+
+    /// A duration of zero means the player didn't report one (streams, some local
+    /// files). Callers should hide the bar rather than show a full or empty one.
+    var isMeasurable: Bool { duration > 0 }
+
+    func elapsed(at date: Date) -> TimeInterval {
+        guard isPlaying else { return min(elapsed, duration) }
+        return min(elapsed + date.timeIntervalSince(sampledAt), duration)
+    }
+
+    func fraction(at date: Date) -> Double {
+        guard isMeasurable else { return 0 }
+        return min(max(elapsed(at: date) / duration, 0), 1)
+    }
+}
+
 /// Detects and controls playback in **Apple Music and Spotify**.
 ///
 /// Primary feed is `DistributedNotificationCenter`: both apps post a notification
@@ -36,6 +63,15 @@ final class NowPlayingManager: ObservableObject {
     @Published private(set) var info: NowPlayingInfo?
     @Published private(set) var artwork: NSImage?
     @Published private(set) var sourceIcon: NSImage?
+
+    /// Playback position, kept **outside** `NowPlayingInfo` on purpose.
+    ///
+    /// `NowPlayingInfo` is `Equatable` and its equality drives real decisions — when
+    /// `playbackStarted` fires, when artwork is refetched. A field that changes every
+    /// few seconds by nature would make every poll look like a track change. It also
+    /// isn't available on every path: the notification feed carries metadata but no
+    /// reliable position, so it would have to be invented or cleared there.
+    @Published private(set) var progress: PlaybackProgress?
 
     private let log = Logger(subsystem: "com.dynamicisland.islet", category: "NowPlaying")
     private let separator = "\u{001F}"
@@ -89,6 +125,7 @@ final class NowPlayingManager: ObservableObject {
         artwork = nil
         sourceIcon = nil
         artworkTrackKey = nil
+        progress = nil
     }
 
     // MARK: - Transport controls
@@ -139,6 +176,10 @@ final class NowPlayingManager: ObservableObject {
         if !new.isPlaying, let current = info, current.isPlaying, current.sourceBundleID != app.bundleID { return }
         lastNotificationAt = Date()
         apply(new)
+        // The feed carries no usable position, so pull one: this is the moment it
+        // changed (track skip, seek, play/pause), and waiting up to 3s for the next
+        // scheduled poll would leave the bar visibly stale exactly when it matters.
+        scheduleRefresh()
     }
 
     /// True while the notification feed is recent enough to outrank an empty poll.
@@ -161,6 +202,7 @@ final class NowPlayingManager: ObservableObject {
 
         Task.detached { [weak self] in
             var best: NowPlayingInfo?
+            var bestProgress: PlaybackProgress?
             for app in running {
                 guard let output = AppleScriptRunner.run(app.metadataScript(separator: separator))?
                     .trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty else { continue }
@@ -171,21 +213,43 @@ final class NowPlayingManager: ObservableObject {
                     isPlaying: parts[3].lowercased() == "playing",
                     sourceName: app.rawValue, sourceBundleID: app.bundleID
                 )
+                // Older field layouts (and any app that couldn't report position) just
+                // omit these, so read them defensively rather than widening the guard
+                // above — losing the whole track because a stream has no duration
+                // would be a much worse trade.
+                let elapsed = parts.count > 5 ? Double(parts[5]) ?? 0 : 0
+                let rawDuration = parts.count > 6 ? Double(parts[6]) ?? 0 : 0
+                let duration = app.durationIsMilliseconds ? rawDuration / 1000 : rawDuration
+                let progress = PlaybackProgress(elapsed: elapsed,
+                                                duration: max(0, duration),
+                                                sampledAt: Date(),
+                                                isPlaying: candidate.isPlaying)
+
                 // A playing app always wins over a paused one.
-                if candidate.isPlaying { best = candidate; break }
-                if best == nil { best = candidate }
+                if candidate.isPlaying {
+                    best = candidate
+                    bestProgress = progress
+                    break
+                }
+                if best == nil {
+                    best = candidate
+                    bestProgress = progress
+                }
             }
             let result = best
+            let resultProgress = bestProgress
             guard let self else { return }
-            await self.applyPolled(result)
+            await self.applyPolled(result, progress: resultProgress)
         }
     }
 
     /// Apply a poll result. An empty poll never clears state the notification feed just
     /// supplied (the likeliest cause of an empty poll is denied Automation permission).
-    private func applyPolled(_ result: NowPlayingInfo?) {
+    private func applyPolled(_ result: NowPlayingInfo?, progress newProgress: PlaybackProgress?) {
         if result == nil, notificationFeedIsFresh { return }
         apply(result)
+        // Only after `apply`, which clears progress when playback stops.
+        if result != nil { progress = newProgress }
     }
 
     // MARK: - Applying state
@@ -205,8 +269,14 @@ final class NowPlayingManager: ObservableObject {
             artwork = nil
             sourceIcon = nil
             artworkTrackKey = nil
+            progress = nil
             return
         }
+
+        // A new track invalidates the old position immediately — otherwise the bar
+        // stays where the last track left it until the next 3s poll lands, which reads
+        // as the new song starting halfway through.
+        if previousKey != new.trackKey { progress = nil }
 
         sourceIcon = MediaApp.allCases.first(where: { $0.bundleID == new.sourceBundleID })?
             .runningApplication?.icon

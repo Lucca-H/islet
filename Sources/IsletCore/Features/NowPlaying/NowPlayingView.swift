@@ -10,9 +10,16 @@ import SwiftUI
 /// competing for.
 enum NowPlayingLayout {
     static let columnSpacing: CGFloat = 18
-    /// Visualizer is sized as a fraction of the album art, so the two squares
-    /// flanking the metadata column stay visually related.
-    static let visualizerRatio: CGFloat = 0.92
+
+    /// Share of the panel the song itself (album art + metadata + transport) may
+    /// occupy, pinned to the left. The remainder belongs to the visualizer.
+    static let songColumnFraction: CGFloat = 0.65
+
+    /// How much of that remainder the visualizer square fills, centred in it. Sizing
+    /// the visualizer from its own region rather than from the album art is what lets
+    /// it sit centred in the space it's given — as a fraction of the art it had no
+    /// relationship to the gap it was actually sitting in.
+    static let visualizerFillFraction: CGFloat = 0.80
 
     static let smallButtonDiameter: CGFloat = 34
     static let largeButtonDiameter: CGFloat = 42
@@ -32,31 +39,86 @@ enum NowPlayingLayout {
     /// overflow. This keeps a deliberate buffer.
     static let metadataBreathingRoom: CGFloat = 8
 
-    /// Fraction of available width the album art may occupy.
+    /// Fraction of the **song column** the album art may occupy.
     ///
-    /// Chosen as the largest value clearing `transportRowMinimum` *plus*
-    /// `metadataBreathingRoom` across every Settings size combination. At the 640x210
-    /// default it costs the art about 4pt versus letting height bind alone —
-    /// imperceptible, and worth it for a guard with actual margin rather than one
-    /// sitting exactly on the boundary. Widening the panel insets or growing the
-    /// transport buttons will require re-deriving this; the layout check sweeps the
-    /// whole slider range and fails loudly if it no longer holds.
-    static let artWidthCap: CGFloat = 0.275
+    /// Chosen as the largest value clearing `transportRowMinimum` plus
+    /// `metadataBreathingRoom` across every Settings size combination. Widening the
+    /// panel insets, growing the transport buttons, or giving the visualizer a larger
+    /// share will require re-deriving it; the layout check sweeps the whole slider
+    /// range and fails loudly if it no longer holds.
+    static let artWidthCap: CGFloat = 0.34
 
-    /// Album art (and, at `visualizerRatio`, the visualizer) fills the available
-    /// height, capped against width.
-    ///
-    /// Both are squares driven by height, flanking a metadata column that can't go
-    /// below `transportRowMinimum`. Sizing on height alone overflowed at narrow
-    /// "Expanded width" settings — at 420x210 the metadata column was left 12pt; at
-    /// 420x340 it went negative.
-    static func artSize(availableHeight: CGFloat, availableWidth: CGFloat) -> CGFloat {
-        max(72, min(availableHeight, availableWidth * artWidthCap))
+    /// The visualizer square: `visualizerFillFraction` of its nominal share, but never
+    /// taller than the panel — at wide-and-short settings width alone would overflow it.
+    static func visualizerSize(availableWidth: CGFloat, availableHeight: CGFloat) -> CGFloat {
+        min(availableWidth * (1 - songColumnFraction) * visualizerFillFraction,
+            availableHeight)
     }
 
-    /// Width left for the metadata column once both squares and the gaps are taken.
-    static func metadataWidth(availableWidth: CGFloat, artSize: CGFloat) -> CGFloat {
-        availableWidth - artSize - columnSpacing * 2 - artSize * visualizerRatio
+    /// The region the visualizer is centred in.
+    ///
+    /// Derived *back* from the square rather than being a flat share of the panel.
+    /// When height binds — which it does at the default size — the square comes out
+    /// smaller than its share, and a fixed region left that slack sitting as dead
+    /// space between the metadata and the ring, plus a wider right margin than the
+    /// left one. Sizing the region to the square keeps the 80% fill (so the ring still
+    /// has breathing room either side) and hands the leftover back to the song column,
+    /// which is where the eye actually wants it.
+    static func visualizerRegionWidth(availableWidth: CGFloat, availableHeight: CGFloat) -> CGFloat {
+        visualizerSize(availableWidth: availableWidth, availableHeight: availableHeight)
+            / visualizerFillFraction
+    }
+
+    /// Width the song column gets: everything the visualizer doesn't need. With the
+    /// visualizer off there's no second region at all, so it takes the whole panel.
+    static func songColumnWidth(availableWidth: CGFloat,
+                                availableHeight: CGFloat,
+                                hasVisualizer: Bool) -> CGFloat {
+        guard hasVisualizer else { return availableWidth }
+        return availableWidth - visualizerRegionWidth(availableWidth: availableWidth,
+                                                      availableHeight: availableHeight)
+    }
+
+    /// Album art fills the available height, capped against the song column's width.
+    ///
+    /// It's a square driven by height, beside a metadata column that can't go below
+    /// `transportRowMinimum`. Sizing on height alone overflowed at narrow "Expanded
+    /// width" settings — at 420x210 the metadata column was left 12pt; at 420x340 it
+    /// went negative.
+    static func artSize(availableHeight: CGFloat, songColumnWidth: CGFloat) -> CGFloat {
+        max(72, min(availableHeight, songColumnWidth * artWidthCap))
+    }
+
+    /// Width left for the metadata column once the art and its gap are taken.
+    static func metadataWidth(songColumnWidth: CGFloat, artSize: CGFloat) -> CGFloat {
+        songColumnWidth - artSize - columnSpacing
+    }
+
+    // MARK: Vertical budget
+
+    /// What the metadata column costs before any progress bar: the source line, title,
+    /// artist, transport row, and the two spacers' minimums. The column is capped at
+    /// the album art's height, so this is what's left to spend.
+    static let metadataFixedHeight: CGFloat = 12 + 22 + 18 + largeButtonDiameter
+    /// The two `Spacer(minLength:)` values in the metadata column, summed.
+    static let metadataSpacerMinimum: CGFloat = 6 + 6
+    /// Bar plus the clearance below it, and additionally the timestamp row plus its gap.
+    static let progressBarOnlyHeight: CGFloat = 3 + 8
+    static let progressBarWithLabelsHeight: CGFloat = 3 + 2 + 11 + 8
+
+    /// How much of the progress bar fits in a column of the given height.
+    ///
+    /// The panel is small and the vertical budget genuinely doesn't always stretch to
+    /// elapsed/remaining labels — at the shortest "Expanded height" it doesn't stretch
+    /// to a bar at all. Degrading in two steps beats either overflowing the column or
+    /// dropping the feature entirely on smaller panels.
+    enum ProgressStyle { case hidden, barOnly, withLabels }
+
+    static func progressStyle(columnHeight: CGFloat) -> ProgressStyle {
+        let spare = columnHeight - metadataFixedHeight - metadataSpacerMinimum
+        if spare >= progressBarWithLabelsHeight { return .withLabels }
+        if spare >= progressBarOnlyHeight { return .barOnly }
+        return .hidden
     }
 }
 
@@ -78,28 +140,42 @@ struct NowPlayingView: View {
             // a smaller "Expanded height" setting (or the notch inset on real
             // hardware) shrinks the art instead of overflowing the panel.
             GeometryReader { proxy in
+                let hasVisualizer = settings.audioVisualizerEnabled
+                let songWidth = NowPlayingLayout.songColumnWidth(availableWidth: proxy.size.width,
+                                                                 availableHeight: proxy.size.height,
+                                                                 hasVisualizer: hasVisualizer)
                 let artSize = NowPlayingLayout.artSize(availableHeight: proxy.size.height,
-                                                       availableWidth: proxy.size.width)
-                HStack(alignment: .center, spacing: NowPlayingLayout.columnSpacing) {
-                    artwork
-                        .frame(width: artSize, height: artSize)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(0.45), radius: 12, y: 5)
+                                                       songColumnWidth: songWidth)
+                // Two fixed-width regions rather than one flexible HStack: the song
+                // column is capped at its share and pinned left, and the visualizer
+                // gets the rest to centre itself in. Letting the columns size
+                // themselves left the visualizer wherever the metadata happened to
+                // end, which is why it never looked centred.
+                HStack(spacing: 0) {
+                    HStack(alignment: .center, spacing: NowPlayingLayout.columnSpacing) {
+                        artwork
+                            .frame(width: artSize, height: artSize)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.45), radius: 12, y: 5)
 
-                    metadata(info, height: artSize)
+                        metadata(info, height: artSize)
+                    }
+                    .frame(width: songWidth, alignment: .leading)
 
-                    if settings.audioVisualizerEnabled {
-                        // "1.7x" was peakGain (how exaggerated the peaks are), not
-                        // this container size — reverted to its original proportion.
+                    if hasVisualizer {
                         CircularVisualizerView(
                             levels: vm.audioVisualizer.bars,
                             isLive: vm.audioVisualizer.isCapturing && vm.audioVisualizer.hasSignal,
-                            size: artSize * NowPlayingLayout.visualizerRatio
+                            size: NowPlayingLayout.visualizerSize(availableWidth: proxy.size.width,
+                                                                  availableHeight: proxy.size.height)
                         )
+                        .frame(width: NowPlayingLayout.visualizerRegionWidth(availableWidth: proxy.size.width,
+                                                                             availableHeight: proxy.size.height),
+                               alignment: .center)
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .leading)
@@ -135,7 +211,19 @@ struct NowPlayingView: View {
                 .lineLimit(1)
                 .padding(.top, 2)
 
-            Spacer(minLength: 10)
+            // Tighter above the bar than below it. Even gaps put the timestamp row
+            // immediately on top of the transport circles, which read as one crowded
+            // block; the bar belongs with the track text it describes, and the buttons
+            // need the clearance more.
+            Spacer(minLength: 6)
+
+            let progressStyle = NowPlayingLayout.progressStyle(columnHeight: height)
+            if progressStyle != .hidden,
+               let progress = vm.nowPlaying.progress, progress.isMeasurable {
+                PlaybackProgressBar(progress: progress,
+                                    showsLabels: progressStyle == .withLabels)
+                    .padding(.bottom, 8)
+            }
 
             // `.firstTextBaseline` and friends would align on glyph metrics, which
             // differ per symbol; `.center` keeps the three circles concentric on one
@@ -157,6 +245,12 @@ struct NowPlayingView: View {
                     vm.nowPlaying.nextTrack()
                 }
             }
+            // Centred under the progress bar rather than left-aligned with the text.
+            // Left-aligned, the three circles sat in a cluster at one end of a
+            // full-width bar with a large void beside them; centring gives the bar and
+            // the transport row a shared axis. The title and artist stay left-aligned —
+            // they're read as text, and ragged-left would be worse.
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .frame(maxWidth: .infinity, maxHeight: height, alignment: .leading)
     }
@@ -189,6 +283,59 @@ struct NowPlayingView: View {
                 .offset(x: symbol == "play.fill" ? 1.5 : 0)
         }
         .buttonStyle(.outline(diameter: diameter))
+    }
+
+    /// Elapsed/remaining track position.
+    ///
+    /// The underlying sample only refreshes every few seconds (an AppleScript poll —
+    /// neither player pushes position), so the bar is driven by a `TimelineView` that
+    /// extrapolates from the last sample rather than animating between them. Animating
+    /// sample-to-sample would visibly step every 3 seconds; extrapolating is smooth and
+    /// self-corrects each time a real reading lands.
+    private struct PlaybackProgressBar: View {
+        let progress: PlaybackProgress
+        let showsLabels: Bool
+
+        private static let barHeight: CGFloat = 3
+
+        var body: some View {
+            // A paused track ticks slowly rather than 10x a second: the bar isn't
+            // moving, so there is nothing to redraw. (Both branches have to be the
+            // same schedule *type*, so this is a long period rather than `.everyMinute`.)
+            TimelineView(.periodic(from: .now, by: progress.isPlaying ? 0.1 : 60)) { timeline in
+                let now = timeline.date
+                VStack(spacing: 2) {
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.16))
+                            Capsule()
+                                .fill(Color.white.opacity(0.75))
+                                .frame(width: proxy.size.width * progress.fraction(at: now))
+                        }
+                    }
+                    .frame(height: Self.barHeight)
+
+                    if showsLabels {
+                        HStack {
+                            Text(Self.timestamp(progress.elapsed(at: now)))
+                            Spacer(minLength: 4)
+                            Text(Self.timestamp(progress.duration - progress.elapsed(at: now)))
+                        }
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.4))
+                        // Digits of differing widths would make the labels twitch every
+                        // second as the numbers change.
+                        .monospacedDigit()
+                    }
+                }
+            }
+        }
+
+        private static func timestamp(_ seconds: TimeInterval) -> String {
+            let total = Int(max(0, seconds.rounded()))
+            return String(format: "%d:%02d", total / 60, total % 60)
+        }
     }
 
     private var emptyState: some View {

@@ -166,6 +166,74 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     #expect(virtual.contentTopInset == 0)
 }
 
+// MARK: Sideways peek geometry
+
+/// A sideways peek pins the edge it grows away from to the collapsed pill's, so all
+/// the extra width lands on the growth side — and a peek with no extra width to add
+/// doesn't move at all, which would otherwise slide the pill off the notch.
+@Test func sidewaysPeekShiftsByHalfItsExtraWidth() {
+    let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                 notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                 hasPhysicalNotch: true)
+    #expect(physical.lateralPeekShift(peekWidth: physical.collapsedContentWidth + 200) == 100)
+    #expect(physical.lateralPeekShift(peekWidth: physical.collapsedContentWidth) == 0)
+    #expect(physical.lateralPeekShift(peekWidth: 10) == 0)
+}
+
+@Test func peekDirectionsShiftOppositeWays() {
+    #expect(PeekDirection.left.lateralSign == -1)
+    #expect(PeekDirection.right.lateralSign == 1)
+    #expect(PeekDirection.down.lateralSign == 0)
+    #expect(!PeekDirection.down.isLateral)
+    #expect(PeekDirection.left.isLateral && PeekDirection.right.isLateral)
+}
+
+/// The peek opens as far as its text needs and no further — but a pathological title
+/// must not be able to drag the pill past what the window can actually draw, and a
+/// short one must not shrink it below its resting size.
+@Test func peekWidthTracksContentWithinBounds() {
+    let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                 notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                 hasPhysicalNotch: true)
+    for direction in PeekDirection.allCases {
+        let tiny = physical.peekWidth(forContentWidth: 10, direction: direction, expandedWidth: 640)
+        let huge = physical.peekWidth(forContentWidth: 100_000, direction: direction, expandedWidth: 640)
+        let ceiling = direction.isLateral ? physical.maxLateralPeekWidth(expandedWidth: 640) : 640
+        #expect(tiny == physical.collapsedContentWidth)
+        #expect(huge == ceiling)
+        #expect(tiny < huge)
+    }
+}
+
+/// A cap below the collapsed pill would shrink it — the floor has to win over the cap.
+@Test func peekNeverShrinksBelowTheCollapsedPill() {
+    let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                 notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                 hasPhysicalNotch: true)
+    #expect(physical.peekWidth(forContentWidth: 100_000, direction: .left, expandedWidth: 1)
+              >= physical.collapsedContentWidth)
+}
+
+/// Longer text has to measure wider, or sizing the pill to its content is a lie.
+@Test func peekMeasurementTracksTextLength() {
+    let short = PeekMetrics.contentWidth(for: .copied(preview: "Hi"))
+    let long = PeekMetrics.contentWidth(for: .copied(preview: String(repeating: "long title ", count: 8)))
+    #expect(long > short)
+    #expect(short > PeekMetrics.horizontalPadding * 2)
+}
+
+/// The notch window is only `expandedWidth` wide (plus shadow slack) and centered on
+/// the notch, so a sideways pill has to stop before the window edge — past it the
+/// pill clips against a plain rectangle instead of `NotchShape`.
+@Test func sidewaysPeekStaysInsideTheNotchWindow() {
+    let physical = NotchGeometry(screen: NSScreen.main ?? NSScreen.screens[0],
+                                 notchRect: CGRect(x: 0, y: 0, width: 200, height: 32),
+                                 hasPhysicalNotch: true)
+    let limit = physical.maxLateralPeekWidth(expandedWidth: 640)
+    #expect(physical.lateralPeekShift(peekWidth: limit) + limit / 2 <= 320)
+    #expect(physical.peekLateralDeadWidth > physical.notchWidth)
+}
+
 // MARK: QuickNoteManager
 
 @MainActor
@@ -187,11 +255,12 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
 
 // MARK: NowPlaying layout
 
-/// Regression guard: album art and the circular visualizer are both squares driven
-/// by the panel's *height*, either side of a metadata column whose transport row
-/// can't shrink below ~118pt. Sizing art on height alone overflowed at narrow
-/// widths — at 420x210 the metadata column was left 12pt, at 420x340 it went
-/// negative, and both are reachable from the Settings sliders.
+/// Regression guard: the album art is a square driven by the panel's *height*, beside
+/// a metadata column whose transport row can't shrink below ~130pt — and the song
+/// column holding both is now capped at its share of the panel rather than taking
+/// whatever it likes. Sizing art on height alone overflowed at narrow widths: at
+/// 420x210 the metadata column was left 12pt, at 420x340 it went negative, and both
+/// are reachable from the Settings sliders.
 @MainActor
 @Test func metadataColumnSurvivesEverySizeSetting() {
     let notchHeight: CGFloat = 32
@@ -199,11 +268,134 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
         for height in stride(from: 140.0, through: 340.0, by: 10.0) {
             let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
             let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+            // Visualizer on is the tighter case — it's what caps the song column.
+            let song = NowPlayingLayout.songColumnWidth(availableWidth: contentWidth,
+                                                        availableHeight: contentHeight,
+                                                        hasVisualizer: true)
             let art = NowPlayingLayout.artSize(availableHeight: contentHeight,
-                                               availableWidth: contentWidth)
-            let metadata = NowPlayingLayout.metadataWidth(availableWidth: contentWidth, artSize: art)
+                                               songColumnWidth: song)
+            let metadata = NowPlayingLayout.metadataWidth(songColumnWidth: song, artSize: art)
             #expect(metadata >= NowPlayingLayout.transportRowMinimum + NowPlayingLayout.metadataBreathingRoom,
                     "metadata column collapsed at \(width)x\(height): \(metadata)pt")
+        }
+    }
+}
+
+// MARK: ArtworkLoader
+
+/// Spotify's `artwork url of current track` usually hands back the 300px thumbnail,
+/// which is barely enough for the panel's art on a 2x display. The dimension is encoded
+/// in the image ID, so the 640px version is the same asset under a different prefix.
+@Test func spotifyArtworkUpgradesToTheLargestVariant() {
+    let hash = "5f7f1f4a2b3c4d5e6f708192"
+    func upgrade(_ string: String) -> String? {
+        URL(string: string).flatMap(ArtworkLoader.highestResolutionSpotifyURL(from:))?.absoluteString
+    }
+    #expect(upgrade("https://i.scdn.co/image/ab67616d00001e02\(hash)")
+              == "https://i.scdn.co/image/ab67616d0000b273\(hash)")
+    #expect(upgrade("https://i.scdn.co/image/ab67616d00004851\(hash)")
+              == "https://i.scdn.co/image/ab67616d0000b273\(hash)")
+}
+
+/// Already-large and unrecognised URLs return nil, so the caller keeps the original
+/// rather than requesting a rewrite that may not exist.
+@Test func unrecognisedArtworkURLsAreLeftAlone() {
+    let hash = "5f7f1f4a2b3c4d5e6f708192"
+    func upgrade(_ string: String) -> URL? {
+        URL(string: string).flatMap(ArtworkLoader.highestResolutionSpotifyURL(from:))
+    }
+    #expect(upgrade("https://i.scdn.co/image/ab67616d0000b273\(hash)") == nil)
+    #expect(upgrade("https://example.com/cover.jpg") == nil)
+    #expect(upgrade("https://i.scdn.co/image/ab67616d0000") == nil)
+}
+
+/// `NSImage` takes its size from DPI metadata, so a 600px cover tagged at 144dpi
+/// reports 300pt and can be drawn softer than the bitmap it actually holds.
+@Test func artworkSizeIsRestatedInPixels() {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 600, pixelsHigh: 600,
+                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                               isPlanar: false, colorSpaceName: .deviceRGB,
+                               bytesPerRow: 0, bitsPerPixel: 0)!
+    let image = NSImage(size: NSSize(width: 300, height: 300))
+    image.addRepresentation(rep)
+    #expect(ArtworkLoader.normalizedToPixelSize(image).size == NSSize(width: 600, height: 600))
+}
+
+// MARK: PlaybackProgress
+
+/// Position comes from a 3-second AppleScript poll, so the bar has to extrapolate
+/// between samples or it visibly steps — but never past the end of the track, and
+/// never at all while paused.
+@Test func playbackProgressExtrapolatesBetweenSamples() {
+    let start = Date()
+    let playing = PlaybackProgress(elapsed: 30, duration: 120, sampledAt: start, isPlaying: true)
+    #expect(playing.fraction(at: start) == 0.25)
+    #expect(playing.elapsed(at: start.addingTimeInterval(30)) == 60)
+    #expect(playing.elapsed(at: start.addingTimeInterval(9999)) == 120)
+    #expect(playing.fraction(at: start.addingTimeInterval(9999)) == 1)
+
+    let paused = PlaybackProgress(elapsed: 30, duration: 120, sampledAt: start, isPlaying: false)
+    #expect(paused.elapsed(at: start.addingTimeInterval(60)) == 30)
+}
+
+/// Streams and some local files report no duration — the bar hides rather than
+/// rendering as permanently empty or full.
+@Test func playbackProgressHandlesUnknownDuration() {
+    let unmeasurable = PlaybackProgress(elapsed: 5, duration: 0, sampledAt: Date(), isPlaying: true)
+    #expect(!unmeasurable.isMeasurable)
+    #expect(unmeasurable.fraction(at: Date()) == 0)
+}
+
+/// Spotify reports `duration of current track` in milliseconds and Music in seconds,
+/// for the same property name — reading both as one unit is out by a factor of 1000.
+@Test func durationUnitsDifferPerApp() {
+    #expect(MediaApp.spotify.durationIsMilliseconds)
+    #expect(!MediaApp.music.durationIsMilliseconds)
+}
+
+/// Whatever the progress bar draws has to fit the metadata column's spare height, or
+/// it pushes the transport row out of the panel.
+@MainActor
+@Test func progressBarOnlyShownWhereItFits() {
+    let notchHeight: CGFloat = 32
+    for width in stride(from: 420.0, through: 900.0, by: 10.0) {
+        for height in stride(from: 140.0, through: 340.0, by: 10.0) {
+            let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
+            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+            let song = NowPlayingLayout.songColumnWidth(availableWidth: contentWidth,
+                                                        availableHeight: contentHeight,
+                                                        hasVisualizer: true)
+            let art = NowPlayingLayout.artSize(availableHeight: contentHeight, songColumnWidth: song)
+            let spare = art - NowPlayingLayout.metadataFixedHeight - NowPlayingLayout.metadataSpacerMinimum
+            let needed: CGFloat
+            switch NowPlayingLayout.progressStyle(columnHeight: art) {
+            case .hidden:     needed = 0
+            case .barOnly:    needed = NowPlayingLayout.progressBarOnlyHeight
+            case .withLabels: needed = NowPlayingLayout.progressBarWithLabelsHeight
+            }
+            #expect(needed <= max(spare, 0) + 0.001, "progress bar overflowed at \(width)x\(height)")
+        }
+    }
+    #expect(NowPlayingLayout.progressStyle(columnHeight: 0) == .hidden)
+    #expect(NowPlayingLayout.progressStyle(columnHeight: 1000) == .withLabels)
+}
+
+/// The visualizer is a square inside a fixed-width region, so it has to fit both that
+/// region and the panel's height — width alone overflows it at wide-and-short sizes.
+@MainActor
+@Test func visualizerFitsItsRegionAtEverySizeSetting() {
+    let notchHeight: CGFloat = 32
+    for width in stride(from: 420.0, through: 900.0, by: 10.0) {
+        for height in stride(from: 140.0, through: 340.0, by: 10.0) {
+            let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
+            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+            let size = NowPlayingLayout.visualizerSize(availableWidth: contentWidth,
+                                                       availableHeight: contentHeight)
+            let region = NowPlayingLayout.visualizerRegionWidth(availableWidth: contentWidth,
+                                                                availableHeight: contentHeight)
+            #expect(size > 0, "visualizer vanished at \(width)x\(height)")
+            #expect(size <= contentHeight + 0.001, "visualizer overflowed height at \(width)x\(height)")
+            #expect(size <= region + 0.001, "visualizer overflowed its region at \(width)x\(height)")
         }
     }
 }

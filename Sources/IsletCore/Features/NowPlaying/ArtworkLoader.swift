@@ -34,7 +34,8 @@ enum ArtworkLoader {
         }
     }
 
-    /// Spotify exposes an artwork URL, so just download it.
+    /// Spotify exposes an artwork URL, so just download it — at the largest size it
+    /// offers rather than whichever one AppleScript happened to hand back.
     private static func fetchSpotify() -> NSImage? {
         let script = """
         if application "Spotify" is running then
@@ -50,10 +51,57 @@ enum ArtworkLoader {
         """
         guard
             let raw = AppleScriptRunner.run(script)?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !raw.isEmpty, let url = URL(string: raw),
-            let data = try? Data(contentsOf: url)
+            !raw.isEmpty, let url = URL(string: raw)
         else { return nil }
-        return NSImage(data: data)
+
+        // Try the upgraded URL first, but never let a failed guess cost us the artwork
+        // entirely — if Spotify ever changes its CDN scheme the rewrite could 404.
+        if let upgraded = highestResolutionSpotifyURL(from: url),
+           let data = try? Data(contentsOf: upgraded),
+           let image = NSImage(data: data) {
+            return normalizedToPixelSize(image)
+        }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return NSImage(data: data).map(normalizedToPixelSize)
+    }
+
+    /// Rewrite a Spotify CDN image URL to its 640px variant.
+    ///
+    /// `artwork url of current track` usually returns the **300px** thumbnail, which is
+    /// only just enough for the panel's ~132pt art on a 2x display and visibly soft on
+    /// the larger size settings. Spotify encodes the dimension in the image ID itself —
+    /// `ab67616d` followed by 8 hex digits identifying the size, then the album's own
+    /// hash — so the large version is the same asset under a different prefix, no API
+    /// call needed. Returns nil when the URL isn't in that recognised form, so an
+    /// unfamiliar scheme falls back to the original rather than being mangled.
+    static func highestResolutionSpotifyURL(from url: URL) -> URL? {
+        let prefix = "ab67616d"
+        let largeSize = "0000b273"   // 640x640
+        let text = url.absoluteString
+
+        guard let marker = text.range(of: prefix),
+              let sizeEnd = text.index(marker.upperBound, offsetBy: 8, limitedBy: text.endIndex)
+        else { return nil }
+
+        let sizeField = marker.upperBound..<sizeEnd
+        guard text[sizeField].allSatisfy(\.isHexDigit) else { return nil }
+        guard text[sizeField] != largeSize else { return nil } // already the large variant
+
+        return URL(string: text.replacingCharacters(in: sizeField, with: largeSize))
+    }
+
+    /// Make an `NSImage` report its size in *pixels* rather than in DPI-derived points.
+    ///
+    /// `NSImage(data:)` takes its `size` from the file's DPI metadata, so a 600px cover
+    /// tagged at 144dpi reports a 300pt size. SwiftUI then treats that as the image's
+    /// natural size and can draw it softer than the bitmap it actually holds. Restating
+    /// the size as the real pixel dimensions costs nothing and keeps all the detail
+    /// available to `.resizable()`.
+    static func normalizedToPixelSize(_ image: NSImage) -> NSImage {
+        let widest = image.representations.max(by: { $0.pixelsWide < $1.pixelsWide })
+        guard let rep = widest, rep.pixelsWide > 0, rep.pixelsHigh > 0 else { return image }
+        image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+        return image
     }
 
     /// Music only exposes artwork as raw bytes, which don't survive a round trip
@@ -90,6 +138,8 @@ enum ArtworkLoader {
         guard AppleScriptRunner.run(script)?.contains("ok") == true else { return nil }
         defer { try? FileManager.default.removeItem(atPath: path) }
         guard let data = FileManager.default.contents(atPath: path) else { return nil }
-        return NSImage(data: data)
+        // Music hands over the full embedded artwork, so there's no larger version to
+        // ask for — but it still needs its size restated in pixels.
+        return NSImage(data: data).map(normalizedToPixelSize)
     }
 }

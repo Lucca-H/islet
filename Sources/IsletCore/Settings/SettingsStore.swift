@@ -50,6 +50,41 @@ enum NotchMaterial: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which way the collapsed pill grows when a live activity peeks.
+///
+/// `.down` keeps the pill centered on the notch and grows past the notch band so
+/// its text clears the camera housing. `.left` and `.right` instead pin the pill's
+/// opposite edge and extend it sideways into the menu-bar strip flanking the notch —
+/// real, displayable pixels, so the row needs no vertical growth at all.
+enum PeekDirection: String, CaseIterable, Identifiable {
+    case down
+    case left
+    case right
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .down:  return "Down"
+        case .left:  return "Left"
+        case .right: return "Right"
+        }
+    }
+
+    /// Sideways growth keeps the pill inside the menu-bar band; `.down` leaves it.
+    var isLateral: Bool { self != .down }
+
+    /// Which way the pill's extra width extends: -1 leftward, +1 rightward, 0 for
+    /// a downward peek that stays centered on the notch.
+    var lateralSign: CGFloat {
+        switch self {
+        case .down:  return 0
+        case .left:  return -1
+        case .right: return 1
+        }
+    }
+}
+
 /// Central, observable, persisted configuration for the whole app.
 ///
 /// Every property mirrors a `UserDefaults` key so settings survive relaunches.
@@ -72,6 +107,7 @@ final class SettingsStore: ObservableObject {
     @Published var hoverCloseDelay: Double { didSet { persist(oldValue, hoverCloseDelay, "hoverCloseDelay") } }
     @Published var hapticFeedback: Bool    { didSet { persist(oldValue, hapticFeedback, "hapticFeedback") } }
     @Published var peekMediaArt: Bool      { didSet { persist(oldValue, peekMediaArt, "peekMediaArt") } }
+    @Published var peekDirection: PeekDirection { didSet { persistRaw(oldValue.rawValue, peekDirection.rawValue, "peekDirection") } }
     /// Off by default: this requires granting Screen & System Audio Recording
     /// permission, a materially heavier ask than anything else Islet does.
     @Published var audioVisualizerEnabled: Bool { didSet { persist(oldValue, audioVisualizerEnabled, "audioVisualizerEnabled") } }
@@ -115,6 +151,7 @@ final class SettingsStore: ObservableObject {
         hoverCloseDelay = defaults.object(forKey: "hoverCloseDelay") as? Double ?? 0.35
         hapticFeedback  = defaults.object(forKey: "hapticFeedback")  as? Bool ?? true
         peekMediaArt    = defaults.object(forKey: "peekMediaArt")    as? Bool ?? true
+        peekDirection   = defaults.string(forKey: "peekDirection").flatMap(PeekDirection.init) ?? .down
         audioVisualizerEnabled = defaults.object(forKey: "audioVisualizerEnabled") as? Bool ?? false
 
         let material = defaults.string(forKey: "notchMaterial").flatMap(NotchMaterial.init) ?? .liquidGlass
@@ -147,6 +184,7 @@ final class SettingsStore: ObservableObject {
         hoverCloseDelay = 0.35
         hapticFeedback = true
         peekMediaArt = true
+        peekDirection = .down
         audioVisualizerEnabled = false
         notchMaterial = .liquidGlass
         expandedWidth = 640

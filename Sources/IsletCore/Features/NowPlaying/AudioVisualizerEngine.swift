@@ -79,10 +79,15 @@ final class AudioVisualizerEngine: ObservableObject {
         log.info("\(message, privacy: .public)")
     }
 
-    /// Enough bands for the circular visualizer to read as a detailed spectrum
-    /// rather than a few chunky blocks. The compact pill bars downsample this via
-    /// `compactBars(count:)`, so one FFT feeds both.
-    nonisolated static let bandCount = 32
+    /// Enough bands for the circular visualizer to read as a fine-grained ring of
+    /// hair-thin ticks rather than a few chunky blocks. The compact pill bars
+    /// downsample this via `compactBars(count:)`, so one FFT feeds both.
+    ///
+    /// This is bounded by FFT resolution at the *bottom* of the range, not by
+    /// anything visual: log-spaced bands get narrower the lower they go, and once a
+    /// band is narrower than one FFT bin, neighbouring bands read the same bin and
+    /// move identically. `AudioOutput.fftSize` is sized against this.
+    nonisolated static let bandCount = 96
     /// One instance app-wide: Settings shows live status (authorized? capturing?)
     /// from the exact same engine the notch is actually using, not a lookalike.
     static let shared = AudioVisualizerEngine()
@@ -259,6 +264,7 @@ final class AudioVisualizerEngine: ObservableObject {
         // what tells us whether a watchdog restart actually recovered audio, versus
         // reconnecting to a stream that stays silent.
         hasReceivedAnyBuffer = false
+        output.resetGain()
         signalTimer?.invalidate()
         signalTimer = nil
         Task { try? await toStop?.stopCapture() }
@@ -278,16 +284,21 @@ final class AudioVisualizerEngine: ObservableObject {
         }
     }
 
-    /// Average the full spectrum down to `count` buckets, for the compact collapsed
-    /// bars — one FFT drives both the detailed circular view and the mini bars.
+    /// Reduce the full spectrum to `count` buckets, for the compact collapsed bars —
+    /// one FFT drives both the detailed circular view and the mini bars.
+    ///
+    /// Takes each bucket's **peak**, not its mean. Averaging 8 bands into one bar
+    /// buried every peak under its quiet neighbours, so the mini bars sat far lower
+    /// than the circular visualizer built from the same data and barely moved. A
+    /// 4-bar meter is a summary, not a spectrum: the loudest thing in the range is
+    /// what it should show, and it makes the bars independent of bucket width.
     func compactBars(count: Int) -> [CGFloat] {
         guard count > 0, !bars.isEmpty else { return Array(repeating: 0, count: max(0, count)) }
         let bucket = Double(bars.count) / Double(count)
         return (0..<count).map { index in
             let lower = Int(Double(index) * bucket)
             let upper = min(bars.count, max(lower + 1, Int(Double(index + 1) * bucket)))
-            let slice = bars[lower..<upper]
-            return slice.reduce(0, +) / CGFloat(slice.count)
+            return bars[lower..<upper].max() ?? 0
         }
     }
 
@@ -326,13 +337,56 @@ private final class AudioOutput: NSObject, SCStreamOutput, @unchecked Sendable {
     var onRawFormatLogged: ((String) -> Void)?
     private var hasLoggedRawFormat = false
 
-    private let fftSize = 1024
+    /// 2048 rather than 1024 to keep up with `bandCount`. At 48kHz a 1024-point FFT
+    /// gives ~47Hz bins, but the lowest log-spaced bands are only a few Hz wide, so
+    /// a whole run of them resolved to the same bin and moved as one block. Doubling
+    /// the window halves the bin width; the extra ~21ms of latency is imperceptible
+    /// for a visualizer.
+    private let fftSize = 2048
     private let fftSetup: FFTSetup
     private let log2n: vDSP_Length
     private var window: [Float]
     private var sampleBuffer: [Float] = []
     private var smoothedBands: [Float]
     private var lastSampleRate: Double = 44100
+
+    /// Rolling reference level the bands are normalized against, so what's displayed
+    /// is the *shape* of the spectrum rather than its absolute amplitude.
+    ///
+    /// Without this the bars were divided by a fixed constant, which meant they were
+    /// really an output-volume meter: turning Spotify's own slider down shrank the
+    /// visualizer even though the music hadn't changed, and a quiet track never lit
+    /// up at all. The reference chases the loudest band upward quickly (so a sudden
+    /// transient doesn't sit pinned at full scale) and falls back slowly (so quiet
+    /// passages within a track aren't instantly blown up to full height, which would
+    /// flatten out the track's own dynamics).
+    private var gainReference: Float = 0
+    /// Whether `gainReference` has seen real audio yet. The first non-silent frame
+    /// snaps it straight to that frame's level instead of letting `referenceAttack`
+    /// climb from zero, which would otherwise flash full-scale bars for a few frames
+    /// every time capture starts.
+    private var hasAdaptedGain = false
+
+    /// Below this the input is treated as genuine silence and the bands are zeroed,
+    /// rather than scaled up.
+    ///
+    /// This replaced a *floor on the reference itself*, which was the wrong shape for
+    /// the job. A floor doesn't only guard silence: it's also the point where
+    /// volume-independence quietly stops, because once the loudest band drops under it
+    /// the reference stops adapting and levels scale straight with amplitude again. At
+    /// ordinary reduced-volume listening that regime was already in effect — masked in
+    /// the circular visualizer, whose `peakGain` clamp saturates the top bars and hides
+    /// it, but plainly visible in the mini bars, which map level linearly. Gating on
+    /// silence instead leaves the reference free to adapt at *any* audible level, so
+    /// the two agree and neither tracks the volume slider.
+    private static let silenceThreshold: Float = 0.02
+    /// Keeps the reference off zero so normalization can't divide by it.
+    private static let referenceEpsilon: Float = 0.0001
+    private static let referenceAttack: Float = 0.35
+    private static let referenceRelease: Float = 0.005
+    /// Keeps the loudest band just shy of the ceiling, so peaks read as peaks instead
+    /// of clipping flat against the top of the range.
+    private static let headroom: Float = 0.92
 
     override init() {
         log2n = vDSP_Length(log2(Double(fftSize)))
@@ -388,6 +442,17 @@ private final class AudioOutput: NSObject, SCStreamOutput, @unchecked Sendable {
         }
 
         processAvailableWindows()
+    }
+
+    /// Drop the adapted gain back to the floor so a new capture session starts from
+    /// scratch. Without this a session that ended during a loud passage would open
+    /// the next one with a high reference, showing flat near-zero bars until the slow
+    /// release worked it back down.
+    func resetGain() {
+        gainReference = 0
+        hasAdaptedGain = false
+        smoothedBands = [Float](repeating: 0, count: AudioVisualizerEngine.bandCount)
+        sampleBuffer.removeAll(keepingCapacity: true)
     }
 
     private func processAvailableWindows() {
@@ -451,16 +516,74 @@ private final class AudioOutput: NSObject, SCStreamOutput, @unchecked Sendable {
         var bands = [Float](repeating: 0, count: bandCount)
         let binHz = lastSampleRate / Double(fftSize)
         for b in 0..<bandCount {
+            // A band narrower than one bin used to be skipped outright, leaving it
+            // pinned at zero forever — which silently killed the lowest bands even at
+            // 32 of them, and would have killed a whole run of them at 96. Such a band
+            // is legitimately just "whichever bin it falls in", so clamp to that
+            // rather than dropping it.
             let loBin = max(1, Int(edges[b] / binHz))
-            let hiBin = min(fftSize / 2 - 1, Int(edges[b + 1] / binHz))
-            guard hiBin > loBin else { continue }
+            let hiBin = max(loBin, min(fftSize / 2 - 1, Int(edges[b + 1] / binHz)))
             var sum: Float = 0
             for bin in loBin...hiBin { sum += magnitudes[bin] }
             let average = sum / Float(hiBin - loBin + 1)
             // Rough perceptual scaling: sqrt compresses the dynamic range so quiet
             // passages still show some motion instead of sitting near zero.
-            bands[b] = min(1, sqrt(average) / 12.0)
+            // The tilt then corrects for music's natural spectral slope — see below.
+            let centerFreq = (edges[b] + edges[b + 1]) / 2
+            bands[b] = sqrt(average) * Self.tilt(atFrequency: centerFreq, minFreq: minFreq)
         }
-        return bands
+        return normalize(bands)
+    }
+
+    /// Per-band boost correcting for the natural downward slope of music spectra.
+    ///
+    /// Recorded music has roughly `1/f` energy: bass carries most of it and treble
+    /// carries very little, so an untilted FFT display is nearly all bass — the top
+    /// bands technically move but sit near zero, which is exactly what it looked
+    /// like. Since the band values here are `sqrt(magnitude)`, a `1/f` magnitude
+    /// slope is an `f^-0.5` amplitude slope, so `f^0.5` would flatten it completely.
+    ///
+    /// It is deliberately **less** than that. Full flattening overshoots badly in
+    /// practice, and not because bass gets quieter — the tilt leaves the lowest band
+    /// untouched. It's `normalize` downstream: automatic gain divides by the loudest
+    /// band, and a fully-flattened spectrum makes that band a treble one, so bass ends
+    /// up scaled against treble and nearly vanishes. A partial tilt lifts the top end
+    /// while leaving bass the reference it's normalized against.
+    ///
+    /// This still has to run *before* `normalize` — tilting afterwards would leave the
+    /// reference set by untilted bass, which is the original problem untouched.
+    private static let tiltExponent: Float = 0.3
+    private static func tilt(atFrequency freq: Double, minFreq: Double) -> Float {
+        pow(Float(max(freq, minFreq) / minFreq), tiltExponent)
+    }
+
+    /// Scale the raw band magnitudes against a slowly-adapting reference level, so
+    /// the visualizer responds to the music rather than to how loud it happens to be
+    /// playing. A fixed divisor here previously made the display a volume meter.
+    ///
+    /// The reference adapts at every audible level — there is deliberately no floor on
+    /// it, since a floor reintroduces amplitude-tracking below itself. Silence is
+    /// handled by zeroing the output instead, which is the thing a floor was really
+    /// there to prevent.
+    private func normalize(_ raw: [Float]) -> [Float] {
+        let loudest = raw.max() ?? 0
+
+        guard loudest > Self.silenceThreshold else {
+            // Let the reference keep decaying so the next sound doesn't have to fight
+            // a stale high value, but show nothing while there's nothing to show.
+            gainReference = max(Self.referenceEpsilon, gainReference * (1 - Self.referenceRelease))
+            return [Float](repeating: 0, count: raw.count)
+        }
+
+        if hasAdaptedGain {
+            let rate = loudest > gainReference ? Self.referenceAttack : Self.referenceRelease
+            gainReference += (loudest - gainReference) * rate
+        } else {
+            hasAdaptedGain = true
+            gainReference = loudest
+        }
+        gainReference = max(Self.referenceEpsilon, gainReference)
+
+        return raw.map { min(1, $0 / gainReference * Self.headroom) }
     }
 }

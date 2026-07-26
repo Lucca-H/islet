@@ -31,7 +31,9 @@ Hover the notch and it expands into a real **Liquid Glass** panel with three tab
 - Large album art, title, artist, and source app, with outlined
   **play / pause / next / previous** controls.
 - An optional **circular spectrum visualizer** on the right, driven by a real 32-band
-  FFT of the audio actually playing (Settings → Notch → Audio visualizer). Off by
+  FFT of the audio actually playing (Settings → Notch → Audio visualizer). Levels are
+  gain-normalized, so the bars react to the music rather than to how loud you happen to
+  have the volume turned up. Off by
   default: it requires granting Screen & System Audio Recording permission, the
   heaviest ask anywhere in Islet, so it's opt-in only. Capture runs only while a track
   is actually playing, so the system recording indicator isn't up any longer than
@@ -62,6 +64,10 @@ click away in the notch. Autosaves as you type.
 A subtle, brief widening of the collapsed pill — not a full expand — hints at background
 events: a track starting, a file landing on the shelf, something new on the clipboard.
 Never fires while you're already looking at the notch.
+
+Pick which way it grows in Settings → Notch → **Live activity direction**: **Down** drops
+the pill below the menu bar, while **Left** and **Right** keep it in the menu bar and
+extend it sideways out of that edge of the notch.
 
 ### 🧊 Liquid Glass throughout
 The collapsed notch always stays solid black, blending into the physical hardware

@@ -40,7 +40,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // React to feature toggles without a relaunch.
         settings.objectWillChange
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.applyFeatureState() }
+            .sink { [weak self] _ in
+                self?.applyFeatureState()
+                // Whether the shield belongs up at all depends on `expandTrigger`,
+                // so switching hover/click has to re-evaluate it, not just wait for
+                // the next expand.
+                self?.updateClickShield()
+            }
             .store(in: &cancellables)
 
         // Capture system audio only while both the setting is on and something is
@@ -118,20 +124,34 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Outside clicks
 
-    /// The shield is only up while something is open, so it never eats a click
-    /// the user meant for another app.
+    /// The shield goes up only when a click is genuinely how the notch gets
+    /// dismissed — that is, in **click** trigger mode while something is open.
+    ///
+    /// In hover mode it was actively harmful. The notch dismisses itself when the
+    /// pointer leaves, but not instantly: `hoverCloseDelay` (0.35s by default) keeps
+    /// it expanded for a moment afterward, and the shield spans every screen for that
+    /// whole window. Moving off the notch and clicking something straight away — an
+    /// entirely normal thing to do, and fast enough to beat 350ms — meant the click
+    /// hit the shield instead of its target and was swallowed for a dismissal the
+    /// user had already accomplished by moving away. There is no dismissing click to
+    /// consume in hover mode, so there is nothing for the shield to do there.
     private func updateClickShield() {
-        if controllers.contains(where: { $0.viewModel.isExpanded }) {
+        let dismissedByClicking = settings.expandTrigger == .click
+        if dismissedByClicking && controllers.contains(where: { $0.viewModel.isExpanded }) {
             clickShield.show()
         } else {
             clickShield.hide()
         }
     }
 
-    /// The shield absorbed a click: collapse now and get out of the way, so the
-    /// user's next click reaches whatever they were aiming at.
+    /// The shield absorbed a click: collapse and get out of the way, so the user's
+    /// *next* click reaches whatever they were aiming at.
+    ///
+    /// `dismiss()` rather than `hide()` because the shield has only seen the mouse
+    /// **down** at this point. Ordering out here left the matching mouse-up to land
+    /// on whatever was underneath, so the click was only half-swallowed.
     private func dismissOnOutsideClick() {
-        clickShield.hide()
+        clickShield.dismiss()
         controllers.forEach { $0.viewModel.clickedOutside() }
     }
 

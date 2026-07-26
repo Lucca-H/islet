@@ -101,11 +101,26 @@ private struct NotchSettings: View {
             sliderRow("Closed height boost", value: $settings.closedHeightBoost, range: 0...16, unit: "pt")
             Toggle("Peek album art when playing", isOn: $settings.peekMediaArt)
 
+            Picker("Live activity direction", selection: $settings.peekDirection) {
+                ForEach(PeekDirection.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(peekDirectionCaption)
+                .font(.footnote).foregroundStyle(.secondary)
+
             Section("Audio visualizer") {
                 AudioVisualizerSettingsRow()
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var peekDirectionCaption: String {
+        switch settings.peekDirection {
+        case .down:  return "New songs, files, and copies drop the notch down below the menu bar."
+        case .left:  return "New songs, files, and copies extend the notch leftward, staying in the menu bar."
+        case .right: return "New songs, files, and copies extend the notch rightward, staying in the menu bar."
+        }
     }
 }
 

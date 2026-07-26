@@ -33,6 +33,12 @@ enum MediaApp: String, CaseIterable {
         NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
     }
 
+    /// Whether `duration of current track` comes back in milliseconds.
+    ///
+    /// Spotify reports milliseconds and Music reports seconds, for the same property
+    /// name — reading both as one unit puts the progress bar out by a factor of 1000.
+    var durationIsMilliseconds: Bool { self == .spotify }
+
     /// AppleScript that returns the current track as unit-separated fields, or an
     /// empty string when stopped. Guarded by `is running` so it never launches the app.
     ///
@@ -52,7 +58,16 @@ enum MediaApp: String, CaseIterable {
                     set theArtist to artist of current track
                     set theAlbum to album of current track
                     \(artwork)
-                    return theTitle & "\(separator)" & theArtist & "\(separator)" & theAlbum & "\(separator)" & theState & "\(separator)" & theArt
+                    -- Position and duration are read in their own try block: a track
+                    -- can legitimately report neither (streams, some local files), and
+                    -- letting that fail would throw away the metadata above with it.
+                    set thePosition to 0
+                    set theDuration to 0
+                    try
+                        set thePosition to player position
+                        set theDuration to duration of current track
+                    end try
+                    return theTitle & "\(separator)" & theArtist & "\(separator)" & theAlbum & "\(separator)" & theState & "\(separator)" & theArt & "\(separator)" & (thePosition as text) & "\(separator)" & (theDuration as text)
                 on error
                     return ""
                 end try

@@ -57,9 +57,24 @@ drift apart.
 one window level below the notch while it's expanded, existing only to consume the
 click that dismisses it — the way clicking to close a menu also swallows the click,
 rather than passing it through to whatever's behind. A global `NSEvent` monitor can
-observe other apps' clicks but can't consume them; a window of Islet's own can. It
-only goes up while a notch is actually expanded (`AppDelegate.updateClickShield`), so
-it never eats a click meant for another app otherwise.
+observe other apps' clicks but can't consume them; a window of Islet's own can.
+
+Because it covers every screen, when it goes up matters as much as what it does:
+
+- **Only in `.click` trigger mode.** In hover mode the notch dismisses itself when the
+  pointer leaves — but not instantly, since `hoverCloseDelay` keeps it expanded a
+  moment longer, and the shield spanned everything for that whole window. Moving off
+  the notch and clicking straight away (normal, and easily faster than 350ms) got the
+  click eaten for a dismissal that had already happened. There is no dismissing click
+  to consume in hover mode, so the shield doesn't go up there at all.
+- **It stays up until mouse-*up*.** A click is two events; ordering the window out
+  during the mouse-down left the up to land on whatever was behind it, so the click was
+  split rather than swallowed — enough to trigger anything acting on mouse-up. `hide()`
+  is deferred while a click is in flight, with a timeout in case the up never arrives
+  (better a leaked click than a screen-wide shield stuck up forever).
+- **`acceptsFirstMouse`** is true: Islet is a background app and essentially never
+  frontmost, so every click the shield sees is the kind AppKit would otherwise spend on
+  activating the app rather than delivering to the view.
 
 ## Visual surface: three states, one window
 
@@ -71,6 +86,26 @@ notch:
 - **Peek** — the same shape, briefly widened (`NotchViewModel.showPeek`), showing a
   small icon + one line of text. Auto-dismisses after ~2s; never fires while the notch
   is expanded or hovered.
+
+  Which way it grows is `SettingsStore.peekDirection`. **Down** (the default) keeps the
+  pill centered on the notch and grows it *past* the notch band, so the text row clears
+  the camera housing — the same dodge the expanded panel makes with `contentTopInset`.
+  **Left** and **Right** instead pin the pill's opposite edge and extend it sideways into
+  the menu-bar strip beside the notch. That strip is real, displayable pixels, so a
+  sideways peek needs no vertical growth at all and stays exactly as tall as the collapsed
+  pill; what it needs instead is an inset at the *pinned* end
+  (`NotchGeometry.peekLateralDeadWidth`) keeping its content off the cutout. The shift is
+  a plain `.offset` — `NotchGeometry.lateralPeekShift` times `PeekDirection.lateralSign` —
+  and it is clamped by `maxLateralPeekWidth`, because `NotchWindow` is only
+  `expandedWidth` wide and centered on the notch: a pill that grew past the window edge
+  would clip against a rectangle instead of `NotchShape`.
+
+  How *far* it opens comes from `NotchGeometry.peekWidth(forContentWidth:…)`, measuring
+  the row rather than adding a fixed amount of growth — otherwise a two-word clipboard
+  preview opens the same gap as a long song title, which reads as overshooting. The
+  measurement lives in `PeekMetrics`, which the drawing view uses for its own font and
+  padding too: measuring with different metrics than are drawn surfaces as either a
+  clipped word or a stray gap, so there is deliberately only one copy of them.
 - **Expanded** — the notch fully opens.
 
 **Material follows `SettingsStore.notchMaterial`.** In **Solid** mode the notch is
@@ -162,11 +197,33 @@ handling.
   Recording** permission — the same category Zoom/OBS use, and materially heavier than
   anything else Islet asks for — which is exactly why it's gated behind its own
   Settings toggle instead of ever being assumed on. Raw `Float` samples are mixed to
-  mono, windowed (Hann), FFT'd via `vDSP_fft_zrip`, and reduced to 4 log-spaced
+  mono, windowed (Hann), FFT'd via `vDSP_fft_zrip`, normalized by **automatic gain
+  control**, and reduced to 4 log-spaced
   frequency bands (`AudioVisualizerEngine.bandCount`) with an attack/decay envelope
   (fast rise, slower fall) for a lively rather than jittery look. `AudioBars` falls
   back to a non-audio-reactive animation — same bar count — whenever the engine isn't
   actually capturing, so the layout never shifts based on whether the feature is on.
+
+  The AGC step matters more than it sounds. Dividing the FFT magnitudes by a fixed
+  constant — what this did originally — makes the visualizer an *output-volume meter*:
+  turning Spotify's own volume slider down shrinks the bars even though nothing about
+  the music changed, and a quietly-mastered track never lights up. `AudioOutput.
+  normalize` instead scales each frame against a rolling `gainReference` that chases the
+  loudest band quickly (`referenceAttack`) and falls back slowly (`referenceRelease`),
+  so what's displayed is the spectrum's *shape*, not its amplitude. It's reset in
+  `stop()` so a session ending mid-loud-passage doesn't open the next one with a stale
+  high reference.
+
+  Note there is deliberately **no floor** on the reference. An earlier version had one,
+  reasoning that automatic gain would otherwise amplify near-silence to full scale — but
+  a floor is also exactly where volume-independence stops, since below it the reference
+  can't adapt and levels track amplitude again. That regime was reachable at ordinary
+  reduced volume. It went unnoticed in the circular visualizer, whose `peakGain` clamp
+  saturates the top bars and masks it, while the mini bars map level linearly and showed
+  it plainly — which is worth remembering as a debugging signal: *the two views disagree*
+  usually means something upstream is amplitude-dependent and one of them is clipping.
+  Silence is instead handled by `silenceThreshold`, zeroing the output outright, which is
+  what the floor was really trying to achieve.
 
 Three managers publish Combine events (`DropShelfManager.itemAdded`, `ClipboardManager.
 itemCaptured`, `NowPlayingManager.playbackStarted`) that `AppDelegate` forwards into

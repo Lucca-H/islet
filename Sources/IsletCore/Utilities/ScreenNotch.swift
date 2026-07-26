@@ -41,6 +41,51 @@ struct NotchGeometry {
     /// points — the tab strip, most obviously — is invisible on real hardware.
     /// Expanded and peek content therefore starts *below* the band entirely.
     var contentTopInset: CGFloat { hasPhysicalNotch ? notchHeight : 0 }
+
+    /// How far a sideways peek may extend, given the notch window's own width.
+    ///
+    /// The window is centered on the notch and only `expandedWidth` wide, so a pill
+    /// that pins one edge and grows out the other runs out of window after half the
+    /// expanded width plus half the collapsed pill. Growing past that would clip the
+    /// pill against the window edge rather than the `NotchShape`. The window carries
+    /// extra horizontal padding beyond `expandedWidth`, which is deliberately *not*
+    /// counted here — it stays as slack so the drop shadow has somewhere to land.
+    /// Symmetric, so it bounds a leftward and a rightward peek identically.
+    func maxLateralPeekWidth(expandedWidth: CGFloat) -> CGFloat {
+        expandedWidth / 2 + collapsedContentWidth / 2
+    }
+
+    /// How far a sideways peek shifts off the notch's center so the edge it grows
+    /// *away* from stays pinned to the collapsed pill's — i.e. half the extra width.
+    /// Never negative; the caller applies the direction's sign.
+    func lateralPeekShift(peekWidth: CGFloat) -> CGFloat {
+        max(0, (peekWidth - collapsedContentWidth) / 2)
+    }
+
+    /// The width a peek pill needs in order to show `contentWidth` points of content.
+    ///
+    /// Sized to the content rather than to a fixed amount of growth, so a two-word
+    /// clipboard preview doesn't open the same gap as a long song title. Clamped at
+    /// both ends: never narrower than the collapsed pill (which would read as the
+    /// notch *shrinking* to announce something), and never past what the window can
+    /// show — beyond that the text simply truncates, which `PeekContentView` is
+    /// already set up for with `lineLimit(1)` and a tail truncation mode.
+    func peekWidth(forContentWidth contentWidth: CGFloat,
+                   direction: PeekDirection,
+                   expandedWidth: CGFloat) -> CGFloat {
+        let needed = direction.isLateral ? peekLateralDeadWidth + contentWidth : contentWidth
+        let limit = direction.isLateral
+            ? maxLateralPeekWidth(expandedWidth: expandedWidth)
+            : expandedWidth
+        // The floor wins over the cap: a limit narrower than the collapsed pill would
+        // otherwise shrink it, which can happen at the smallest "Expanded width".
+        return min(max(needed, collapsedContentWidth), max(limit, collapsedContentWidth))
+    }
+
+    /// Width at the pinned end of a sideways peek that content must stay clear of:
+    /// the camera cutout plus the safe margin flanking it. Content drawn there is
+    /// behind the housing (or, on a virtual notch, on top of the pill itself).
+    var peekLateralDeadWidth: CGFloat { notchWidth + contentSafeMargin }
 }
 
 enum ScreenNotch {

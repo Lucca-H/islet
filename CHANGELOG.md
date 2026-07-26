@@ -3,6 +3,105 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
+## [Unreleased]
+
+### Added
+- **Song progress bar** in Now Playing, with elapsed and remaining times. Position is
+  read by AppleScript (neither player pushes it), so the bar extrapolates between the
+  3-second samples rather than stepping, and corrects itself each time a real reading
+  lands. Tracks that report no duration — streams, some local files — hide the bar
+  instead of showing an empty one, and it degrades to a bare bar (then to nothing) on
+  panels too short to fit the timestamps.
+- **Live activities can grow sideways instead of dropping down.** Settings → Notch →
+  **Live activity direction** switches a peek (new song, file added, something copied)
+  between the existing drop-down and new **Left** / **Right** modes, which pin the
+  pill's opposite edge and extend it into the menu bar beside the notch — no vertical
+  growth, so it stays inside the menu-bar band. Defaults to **Down**, unchanged.
+
+### Fixed
+- **Album art is sharper.** Two causes. Spotify's `artwork url of current track`
+  usually returns the 300px thumbnail — barely enough for the panel's art at 2x, and
+  soft at the larger size settings; since Spotify encodes the dimension in the image ID,
+  Islet now rewrites it to the 640px variant of the same asset (falling back to the
+  original if that ever stops resolving). Separately, `NSImage` derives its size from
+  DPI metadata, so a 600px cover tagged at 144dpi reported 300pt and could be drawn
+  softer than the bitmap it held; artwork now reports its true pixel size. The second
+  fix applies to Apple Music too.
+- **Peeks no longer overshoot.** The pill widened by a fixed 260pt whatever it was
+  showing, so "Copied an image" opened exactly as far as a long song title — visibly
+  too far for short text. It now measures the row and opens only as wide as that
+  needs, still capped at what the window can draw (long titles truncate as before) and
+  floored at the collapsed width.
+- **Outside-click dismissal no longer eats unrelated clicks.** The screen-spanning
+  shield went up whenever the notch was expanded — including in hover mode, where the
+  notch closes on pointer exit but stays open for `hoverCloseDelay` first. Moving off
+  the notch and immediately clicking something else landed on the shield instead of the
+  target. The shield now only goes up in **click** trigger mode, where a dismissing
+  click is actually a thing that exists.
+- **Dismissing clicks are swallowed whole.** The shield stood down during the mouse-
+  *down*, leaving the matching mouse-*up* to reach whatever was underneath — so the
+  click was halved rather than consumed, and anything acting on mouse-up still fired.
+  It now stays up until the click completes. Also sets `acceptsFirstMouse`, without
+  which clicks arriving while Islet is inactive (i.e. essentially all of them) weren't
+  reliably delivered to the shield at all.
+- **Treble bands read far too low against bass.** Music has a roughly `1/f` spectrum,
+  so an uncorrected FFT display is nearly all bass with the top bands hovering near
+  zero. Bands are now tilted by `f^0.3` before normalization, lifting the top end
+  without flattening the slope entirely — a full `f^0.5` correction moves the loudest
+  band to treble, and since gain control normalizes against the loudest band, that
+  scales bass against treble and makes bass disappear instead.
+- **Mini visualizer bars rendered alternately rounded and squared.** As an `HStack` of
+  capsules each bar was its own layer, and each layer's frame snaps to the backing pixel
+  grid independently — with the bars' stride that snapping alternated, so every other
+  bar's rounded caps rasterized fully while its neighbour's flattened. Drawn in a single
+  `Canvas` now, like the circular visualizer, which removes the per-layer snapping.
+- **Circular visualizer bars rendered at inconsistent widths.** Each was its own
+  rotated view, so ~96 layers were antialiased independently: bars whose angle landed
+  near the pixel grid came out crisp and thin while diagonal ones smeared over an extra
+  pixel and read as fatter. The whole ring is now drawn in a single `Canvas`, so every
+  bar is rasterized in one pass from the same geometry — which is also far less work per
+  frame than 96 animated views.
+- **The lowest frequency bands were permanently dead.** A band narrower than one FFT
+  bin was skipped outright and left pinned at zero — which already silently killed the
+  bottom of the range at 32 bands, and would have wiped out a whole run of them at 96.
+  Such a band now reads whichever bin it falls in.
+- **The mini bars disagreed with the circular visualizer.** They averaged 8 bands per
+  bar, burying each peak under its quiet neighbours; they now take each bucket's peak.
+- **Gain control now holds at every audible level.** It had a floor on the reference,
+  which doubles as the point where volume-independence stops: below it the reference
+  stops adapting and levels track amplitude again. That regime was reachable at
+  ordinary reduced volume — invisible in the circular visualizer, whose peak clamp
+  saturates the top bars and hides it, but plainly visible in the linearly-mapped mini
+  bars, which is why only one of the two looked broken. Silence is now handled by
+  zeroing the output rather than by flooring the reference.
+- **The visualizer no longer tracks playback volume.** Band levels were divided by a
+  fixed constant, which made the display an output-volume meter: turning Spotify's own
+  volume down shrank the bars even though the music hadn't changed, and quietly-mastered
+  tracks barely moved. Levels are now normalized against a slowly-adapting reference, so
+  they follow the spectrum's shape rather than its amplitude. A floor on that reference
+  keeps automatic gain from amplifying silence into a full-scale display.
+
+### Changed
+- **Circular visualizer is far more finely grained** — 96 bands instead of 32, drawn
+  as 1.5pt hairlines, for a ring of fine ticks rather than chunky blocks. The FFT
+  window doubled to 2048 points to actually resolve that many bands at the low end.
+- **Now Playing columns are laid out by share, not by content.** The song (art +
+  metadata + transport) takes ~65% of the panel and is pinned left; the visualizer gets
+  the rest and is centred in it at 80% of that width. Previously the visualizer was
+  sized as a fraction of the album art and simply followed wherever the metadata column
+  happened to end, so it was never actually centred in its space. The visualizer's
+  region is sized back from the square itself, so when panel height binds the leftover
+  width returns to the song column instead of sitting as dead space beside the ring —
+  which is what left the right margin wider than the left.
+- **Mini visualizer is 6 bars** (from 4), in a proportionally wider pill.
+- **Circular visualizer bars reach full brightness earlier**, at 55% level rather than
+  only at the very top of the range. Under the old linear ramp only the single tallest
+  bar was ever fully lit, so the ring read as dull.
+- **Circular visualizer toned down** — less peak exaggeration (1.7x → 1.25x), slightly
+  shorter bars, and a gentler opacity ramp. The old boost existed to compensate for raw
+  magnitudes reading flat; with gain control doing that upstream it was double-counting
+  and left the ring near-saturated.
+
 ## [0.1.0-beta.5] — 2026-07-21
 
 ### Changed
