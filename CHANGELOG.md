@@ -3,7 +3,7 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
-## [Unreleased]
+## [0.1.0-beta.6] — 2026-07-26
 
 ### Added
 - **Song progress bar** in Now Playing, with elapsed and remaining times. Position is
@@ -101,6 +101,8 @@ All notable changes to Islet are documented here. This project follows
   shorter bars, and a gentler opacity ramp. The old boost existed to compensate for raw
   magnitudes reading flat; with gain control doing that upstream it was double-counting
   and left the ring near-saturated.
+
+[0.1.0-beta.6]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.6
 
 ## [0.1.0-beta.5] — 2026-07-21
 
