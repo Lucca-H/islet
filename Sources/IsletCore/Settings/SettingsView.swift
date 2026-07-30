@@ -87,13 +87,13 @@ private struct NotchSettings: View {
     var body: some View {
         Form {
             Picker("Notch style", selection: $settings.notchMaterial) {
-                ForEach(NotchMaterial.allCases) { Text($0.label).tag($0) }
+                ForEach(NotchMaterial.available) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
-            Text(settings.notchMaterial == .liquidGlass
-                 ? "Translucent, refracts whatever is behind the notch. Requires macOS 26."
-                 : "Opaque, matching the physical notch bezel.")
+            .disabled(NotchMaterial.available.count < 2)
+            Text(notchMaterialCaption)
                 .font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             sliderRow("Expanded width", value: $settings.expandedWidth, range: 420...900, unit: "pt", step: 10)
             sliderRow("Expanded height", value: $settings.expandedHeight, range: 140...340, unit: "pt", step: 10)
@@ -115,6 +115,15 @@ private struct NotchSettings: View {
         .formStyle(.grouped)
     }
 
+    private var notchMaterialCaption: String {
+        guard SystemCapabilities.supportsLiquidGlass else {
+            return "Opaque, matching the physical notch bezel. Liquid Glass is a macOS 26 material and isn't available on this Mac — everything else in Islet works the same."
+        }
+        return settings.notchMaterial == .liquidGlass
+            ? "Translucent, refracts whatever is behind the notch."
+            : "Opaque, matching the physical notch bezel."
+    }
+
     private var peekDirectionCaption: String {
         switch settings.peekDirection {
         case .down:  return "New songs, files, and copies drop the notch down below the menu bar."
@@ -132,10 +141,17 @@ private struct AudioVisualizerSettingsRow: View {
     @ObservedObject private var engine = AudioVisualizerEngine.shared
 
     var body: some View {
-        Toggle("Real audio visualizer", isOn: $settings.audioVisualizerEnabled)
-            .onChange(of: settings.audioVisualizerEnabled) { _, enabled in
+        // The permission prompt hangs off a custom binding rather than `onChange`,
+        // whose two-closure form is macOS 14+ and whose one-closure form is
+        // deprecated there. A binding says the same thing and compiles clean on
+        // every version Islet supports.
+        Toggle("Real audio visualizer", isOn: Binding(
+            get: { settings.audioVisualizerEnabled },
+            set: { enabled in
+                settings.audioVisualizerEnabled = enabled
                 if enabled, !engine.isAuthorized { engine.requestAccess() }
             }
+        ))
 
         Text("Replaces the collapsed notch's audio bars with a live frequency visualizer of whatever's actually playing, instead of a decorative animation. This is also the only way Islet can tell that **browser audio** is playing, since Now Playing can't see browsers.\n\nRequires granting **Screen & System Audio Recording** — the same permission Zoom or OBS use — even though only the audio channel is ever read. macOS keeps its screen-recording indicator up for as long as this is switched on.")
             .font(.footnote)

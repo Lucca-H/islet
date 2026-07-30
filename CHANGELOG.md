@@ -3,6 +3,36 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.0-beta.7] — 2026-07-30
+
+### Changed
+- **Minimum macOS lowered from 26 (Tahoe) to 13 (Ventura).** Islet was pinned to Tahoe
+  for exactly one reason — `NSGlassEffectView`, the Liquid Glass material — and that
+  turned out to be the only API in the whole app that needed it. Ventura is the new
+  floor because it's where `ScreenCaptureKit` gained audio capture, which the real
+  audio visualizer depends on; below that the feature would have to be cut rather than
+  degraded.
+- **Liquid Glass is now offered only where it exists.** On macOS 13–15 the Settings →
+  Notch → **Notch style** picker shows Solid alone, the default flips to Solid, and a
+  persisted `liquidGlass` value (from a synced defaults domain, or a disk moved to
+  older hardware) is coerced to Solid at load. The option is hidden rather than mapped
+  onto a vibrancy blur, since that is a visibly different material and labelling it
+  "Liquid Glass" would make the setting a lie. Every other feature is unchanged.
+- `GlassBackground` no longer names `NSGlassEffectView` outside an availability check.
+  Its `NSViewType` is now plain `NSView` and the style argument is Islet's own
+  `GlassStyle` enum — a macOS 26 type in a property or signature is resolved at compile
+  time no matter what runtime branch guards it, which is what forced the deployment
+  target up in the first place. Chrome that is glass unconditionally (the Settings
+  slider) falls back to `NSVisualEffectView`.
+- **README audited against the code.** It still described three tabs (there are four),
+  a 32-band FFT (96 since beta.6), hover-only expansion (click has been an option for a
+  while), and made no mention of the progress bar or of Screen & System Audio Recording
+  in the permissions table. Added a Requirements section for the new version floor and a
+  note on the ad-hoc-signing permission trap.
+- The audio visualizer's permission prompt hangs off a custom `Binding` instead of
+  `onChange(of:initial:_:)`, whose two-closure form is macOS 14+ and whose one-closure
+  form is deprecated there.
+
 ## [0.1.0-beta.6] — 2026-07-26
 
 ### Added
@@ -102,6 +132,7 @@ All notable changes to Islet are documented here. This project follows
   magnitudes reading flat; with gain control doing that upstream it was double-counting
   and left the ring near-saturated.
 
+[0.1.0-beta.7]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.6
 
 ## [0.1.0-beta.5] — 2026-07-21

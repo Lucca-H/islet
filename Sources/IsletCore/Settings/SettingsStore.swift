@@ -48,6 +48,29 @@ enum NotchMaterial: String, CaseIterable, Identifiable {
         case .solid:       return "Solid"
         }
     }
+
+    /// The material Islet ships with when it has a choice. Glass is the whole point
+    /// of the notch's look, so it wins wherever the OS can actually draw it.
+    static var preferredDefault: NotchMaterial {
+        SystemCapabilities.supportsLiquidGlass ? .liquidGlass : .solid
+    }
+
+    /// The materials this Mac can offer. Below macOS 26 there is no real Liquid
+    /// Glass, so the picker collapses to a single choice rather than showing an
+    /// option that would quietly render as something else.
+    static var available: [NotchMaterial] {
+        SystemCapabilities.supportsLiquidGlass ? allCases : [.solid]
+    }
+
+    /// Coerce a material to one this Mac can render.
+    ///
+    /// A stored `liquidGlass` can arrive on a pre-26 Mac in ordinary ways — an
+    /// iCloud-synced defaults domain, or a disk moved to older hardware — and it
+    /// would otherwise leave the picker with no selected row and the notch drawing
+    /// a material the user never chose.
+    var supported: NotchMaterial {
+        Self.available.contains(self) ? self : .solid
+    }
 }
 
 /// Which way the collapsed pill grows when a live activity peeks.
@@ -154,8 +177,9 @@ final class SettingsStore: ObservableObject {
         peekDirection   = defaults.string(forKey: "peekDirection").flatMap(PeekDirection.init) ?? .down
         audioVisualizerEnabled = defaults.object(forKey: "audioVisualizerEnabled") as? Bool ?? false
 
-        let material = defaults.string(forKey: "notchMaterial").flatMap(NotchMaterial.init) ?? .liquidGlass
-        notchMaterial = material
+        let material = defaults.string(forKey: "notchMaterial").flatMap(NotchMaterial.init)
+            ?? NotchMaterial.preferredDefault
+        notchMaterial = material.supported
         expandedWidth   = defaults.object(forKey: "expandedWidth")   as? Double ?? 640
         expandedHeight  = defaults.object(forKey: "expandedHeight")  as? Double ?? 210
         cornerRadius    = defaults.object(forKey: "cornerRadius")    as? Double ?? 22
@@ -186,7 +210,7 @@ final class SettingsStore: ObservableObject {
         peekMediaArt = true
         peekDirection = .down
         audioVisualizerEnabled = false
-        notchMaterial = .liquidGlass
+        notchMaterial = .preferredDefault
         expandedWidth = 640
         expandedHeight = 210
         cornerRadius = 22

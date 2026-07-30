@@ -150,6 +150,39 @@ to `NotchShape`'s asymmetric silhouette on its own, so `GlassBackground` is clip
 `NotchShape` from the SwiftUI side rather than relying on the native view's own corner
 handling.
 
+### Deployment target and Liquid Glass
+
+Islet deploys to **macOS 13 (Ventura)**. Ventura is the floor because it's the first
+release with `ScreenCaptureKit` audio capture, which the real audio visualizer needs —
+that's a feature that would have to be *removed* below it, not degraded. Everything
+else in the app was already Ventura-compatible; the target was pinned to 26 purely by
+`NSGlassEffectView`.
+
+Keeping it unpinned takes one discipline: **never name a macOS 26 type outside an
+availability check, including in a type position.** Property types, function
+parameters, and `NSViewRepresentable`'s `NSViewType` are resolved at compile time
+regardless of any runtime `#available` around the code that uses them. So
+`GlassBackground.NSViewType` is plain `NSView`, and `glassPanel(style:)` takes Islet's
+own `GlassStyle` enum, which is mapped to `NSGlassEffectView.Style` only inside a
+`@available(macOS 26.0, *)` method. Both were `NSGlassEffectView`-typed before, and
+either one alone was enough to force the whole package to Tahoe.
+
+Availability shows up in three coordinated places, all routed through
+`SystemCapabilities.supportsLiquidGlass` so they can't drift apart:
+
+- `NotchMaterial.available` drops `.liquidGlass` below 26, so the picker doesn't offer
+  it — the fallback `NSVisualEffectView` is a visibly different material, and shipping
+  it *as* "Liquid Glass" would be a lying setting. It's reserved for chrome that's
+  glass unconditionally, like `GlassSlider`.
+- `NotchMaterial.preferredDefault` picks the shipped default, so a fresh install and
+  "Reset all settings" both land on something renderable.
+- `NotchMaterial.supported` coerces a stored value at load. A persisted `liquidGlass`
+  reaches a pre-26 Mac in ordinary ways — a synced defaults domain, a disk moved to
+  older hardware — and would otherwise leave the picker with no selected row.
+
+Building still requires the macOS 26 SDK, since the glass path is compiled in and
+merely switched off at runtime.
+
 ## Features
 
 - **NowPlayingManager** covers **Apple Music and Spotify only**, via two mechanisms:

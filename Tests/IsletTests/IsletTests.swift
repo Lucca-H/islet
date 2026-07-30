@@ -106,7 +106,8 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     #expect(store.expandedWidth == 640)
     #expect(store.clipboardLimit == 50)
     #expect(store.nowPlayingEnabled == true)
-    #expect(store.notchMaterial == .liquidGlass)
+    #expect(store.notchMaterial == .preferredDefault)
+    #expect(NotchMaterial.available.contains(store.notchMaterial))
     #expect(store.audioVisualizerEnabled == false)
     #expect(store.quickNoteEnabled == true)
 }
@@ -115,6 +116,17 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     for material in NotchMaterial.allCases {
         #expect(NotchMaterial(rawValue: material.rawValue) == material)
     }
+}
+
+/// Liquid Glass is a macOS 26 material, so on older systems it must vanish from the
+/// picker *and* be coerced away if a persisted value still names it.
+@Test func notchMaterialAvailabilityMatchesTheOS() {
+    #expect(NotchMaterial.available.contains(.solid))
+    #expect(NotchMaterial.available.contains(.liquidGlass) == SystemCapabilities.supportsLiquidGlass)
+    for material in NotchMaterial.allCases {
+        #expect(NotchMaterial.available.contains(material.supported))
+    }
+    #expect(NotchMaterial.preferredDefault.supported == NotchMaterial.preferredDefault)
 }
 
 @MainActor

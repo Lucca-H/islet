@@ -181,7 +181,16 @@ public func runIsletSelfChecks() -> Int {
         check(store.expandedWidth == 640, "reset restores expandedWidth")
         check(store.clipboardLimit == 50, "reset restores clipboardLimit")
         check(store.nowPlayingEnabled, "reset restores nowPlayingEnabled")
-        check(store.notchMaterial == .liquidGlass, "reset restores notchMaterial")
+        check(store.notchMaterial == .preferredDefault, "reset restores notchMaterial")
+        check(NotchMaterial.available.contains(store.notchMaterial),
+              "reset never leaves a material this Mac can't render")
+        check(NotchMaterial.available.contains(.solid), "Solid is offered on every supported OS")
+        check(NotchMaterial.available.contains(.liquidGlass) == SystemCapabilities.supportsLiquidGlass,
+              "Liquid Glass is offered exactly when the OS can draw it")
+        check(NotchMaterial.allCases.allSatisfy { NotchMaterial.available.contains($0.supported) },
+              "every material coerces to one this Mac can render")
+        check(NotchMaterial.preferredDefault.supported == .preferredDefault,
+              "the shipped default is always renderable")
         check(store.quickNoteEnabled, "reset restores quickNoteEnabled")
         check(NotchMaterial.allCases.allSatisfy { NotchMaterial(rawValue: $0.rawValue) == $0 }, "NotchMaterial round-trips")
         check(store.peekDirection == .down, "reset restores peekDirection to the classic drop-down")
