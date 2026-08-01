@@ -19,6 +19,11 @@ enum NotchTab: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether the tab's content ends in a footer row, which is what justifies the
+    /// panel's tighter bottom inset. Now Playing doesn't — it ends in a full-height
+    /// album art square, which needs symmetric clearance instead.
+    var hasFooterRow: Bool { self != .nowPlaying }
+
     var symbol: String {
         switch self {
         case .nowPlaying: return "music.note"

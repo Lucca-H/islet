@@ -186,6 +186,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let shouldRun = settings.audioVisualizerEnabled
             && settings.nowPlayingEnabled
             && isPlaying
+        // Follow whichever player Now Playing resolved, so the bars describe the track
+        // shown beside them rather than the whole system mix (a video in a browser
+        // playing over Spotify was being summed into the same FFT). Set before
+        // start() so the first stream is already scoped; changing it while running
+        // restarts capture, since a content filter is fixed per stream.
+        audioVisualizer.setCaptureSource(bundleIdentifier: nowPlaying.info?.sourceBundleID)
         if shouldRun {
             audioVisualizer.start()
             startAudioVisualizerRetryLoopIfNeeded()

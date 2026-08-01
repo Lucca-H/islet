@@ -12,25 +12,47 @@ struct ExpandedNotchView: View {
     /// metadata and visualizer columns compete for.
     static let contentInset: CGFloat = 22
 
-    /// The bottom edge gets its own, deliberately tighter value.
-    ///
-    /// Every tab ends in a footer row (item count / last-edited text on the left, a
-    /// button on the right), and at the shared inset that row read as floating too far
-    /// above the panel's bottom edge. An earlier attempt went the wrong way entirely —
-    /// it *added* clearance for the rounded corners, making the float worse. 10pt
-    /// still clears the corner curve comfortably: at 10pt up from the bottom, a
-    /// 22pt-radius corner has pulled the edge in by only ~3.6pt, well short of the
-    /// footer button's side inset.
+    /// The bottom edge gets its own, deliberately tighter value **for tabs that end in
+    /// a footer row** (item count / last-edited text on the left, a button on the
+    /// right). At the shared inset that row read as floating too far above the panel's
+    /// bottom edge. An earlier attempt went the wrong way entirely — it *added*
+    /// clearance for the rounded corners, making the float worse. 10pt still clears the
+    /// corner curve comfortably: at 10pt up from the bottom, a 22pt-radius corner has
+    /// pulled the edge in by only ~3.6pt, well short of the footer button's side inset.
     static let bottomInset: CGFloat = 10
+
+    /// The symmetric inset used by tabs with no footer.
+    ///
+    /// Now Playing is the only one, and it's the worst possible place for the footer
+    /// tuning to leak: its album art is a square sized to fill the content box's full
+    /// height, so it touches the top and bottom edges and its *only* breathing room is
+    /// this inset. At 22 above and 10 below, a cover that reads as vertically
+    /// off-centre — 2.2:1 clearance on a shape whose whole job is to look square and
+    /// deliberate.
+    ///
+    /// Tighter than the footer tabs' total as well as symmetric, because on a notched
+    /// Mac the album art is bound by the panel's *height*, not its width — it already
+    /// equals the content box exactly, so this inset is the only thing standing between
+    /// it and a larger cover. Trading 6pt of padding for 6pt of art is worth it here in
+    /// a way it wouldn't be on a tab whose content is text.
+    static let balancedInset: CGFloat = 13
+
+    /// Top and bottom insets for a tab's content.
+    static func verticalInsets(for tab: NotchTab) -> (top: CGFloat, bottom: CGFloat) {
+        tab.hasFooterRow ? (contentInset, bottomInset) : (balancedInset, balancedInset)
+    }
 
     static let headerHeight: CGFloat = 34
     static let headerTopPadding: CGFloat = 4
     /// `Divider()` renders as a hairline.
     static let dividerHeight: CGFloat = 1
 
-    /// Height the selected tab's content actually receives, given the whole panel.
-    static func contentHeight(panelHeight: CGFloat) -> CGFloat {
-        panelHeight - headerHeight - headerTopPadding - dividerHeight - contentInset - bottomInset
+    /// Height a tab's content actually receives, given the whole panel. Tab-dependent
+    /// because the vertical insets are.
+    static func contentHeight(panelHeight: CGFloat, tab: NotchTab) -> CGFloat {
+        let insets = verticalInsets(for: tab)
+        return panelHeight - headerHeight - headerTopPadding - dividerHeight
+            - insets.top - insets.bottom
     }
 
     /// Width the selected tab's content actually receives.
@@ -49,11 +71,12 @@ struct ExpandedNotchView: View {
                 .overlay(Color.white.opacity(0.06))
                 .padding(.horizontal, Self.contentInset * 0.75)
 
+            let insets = Self.verticalInsets(for: vm.selectedTab)
             selectedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, Self.contentInset)
-                .padding(.top, Self.contentInset)
-                .padding(.bottom, Self.bottomInset)
+                .padding(.top, insets.top)
+                .padding(.bottom, insets.bottom)
         }
         .foregroundStyle(.white)
     }

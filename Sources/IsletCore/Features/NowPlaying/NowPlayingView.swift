@@ -39,14 +39,21 @@ enum NowPlayingLayout {
     /// overflow. This keeps a deliberate buffer.
     static let metadataBreathingRoom: CGFloat = 8
 
+    /// The narrowest the metadata column is ever allowed to get.
+    static var metadataMinimumWidth: CGFloat { transportRowMinimum + metadataBreathingRoom }
+
     /// Fraction of the **song column** the album art may occupy.
     ///
-    /// Chosen as the largest value clearing `transportRowMinimum` plus
-    /// `metadataBreathingRoom` across every Settings size combination. Widening the
-    /// panel insets, growing the transport buttons, or giving the visualizer a larger
-    /// share will require re-deriving it; the layout check sweeps the whole slider
-    /// range and fails loudly if it no longer holds.
-    static let artWidthCap: CGFloat = 0.34
+    /// This used to be the *only* thing keeping the metadata column alive, so it had to
+    /// be the largest fraction that cleared `metadataMinimumWidth` at every Settings
+    /// size — and since a fraction applies uniformly, the narrowest panel dictated the
+    /// value for all of them. At the default width that left the art well short of the
+    /// space actually going spare.
+    ///
+    /// The floor is now enforced directly in `artSize`, so this is free to be a matter
+    /// of proportion rather than a safety margin: it stops the art from dominating the
+    /// row on very wide panels, and nothing worse happens if it's raised.
+    static let artWidthCap: CGFloat = 0.38
 
     /// The visualizer square: `visualizerFillFraction` of its nominal share, but never
     /// taller than the panel — at wide-and-short settings width alone would overflow it.
@@ -85,8 +92,18 @@ enum NowPlayingLayout {
     /// `transportRowMinimum`. Sizing on height alone overflowed at narrow "Expanded
     /// width" settings — at 420x210 the metadata column was left 12pt; at 420x340 it
     /// went negative.
+    ///
+    /// Three bounds, and it's worth being explicit about which does the work. The
+    /// metadata term is the *correctness* one: it hands the art exactly the width left
+    /// after the transport row is guaranteed its own, so the column can't be squeezed
+    /// no matter how the other constants move. `artWidthCap` is only taste on top of
+    /// that. Deriving the floor rather than approximating it with a fraction is what
+    /// lets the art claim the slack that a uniform fraction had to leave on the table
+    /// at every size except the narrowest.
     static func artSize(availableHeight: CGFloat, songColumnWidth: CGFloat) -> CGFloat {
-        max(72, min(availableHeight, songColumnWidth * artWidthCap))
+        let widthAvailableToArt = songColumnWidth - columnSpacing - metadataMinimumWidth
+        return max(72, min(availableHeight,
+                           min(songColumnWidth * artWidthCap, widthAvailableToArt)))
     }
 
     /// Width left for the metadata column once the art and its gap are taken.

@@ -118,6 +118,41 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     }
 }
 
+/// The collapsed album art is bounded by the real-pixel strip beside the camera
+/// cutout, not by the pill's height — the strip is the narrower of the two, and sizing
+/// off height alone left the cover ~2pt from the pill edge against 7pt above it.
+@Test func collapsedAlbumArtKeepsItsMargins() {
+    let strip = NotchGeometry.sideStripWidth - NotchShape.collapsedTopRadius
+    for height in stride(from: 28.0, through: 44.0, by: 1.0) {
+        let art = CollapsedNotchView.artSize(notchHeight: height, sideStrip: strip)
+        let side = (strip - art) / 2
+        #expect(art <= height, "art taller than the pill at \(height)pt")
+        #expect(side >= CollapsedNotchView.artMargin - 0.001,
+                "art margin collapsed to \(side)pt at \(height)pt")
+        // A square in a box narrower than it is tall can't have four equal margins;
+        // this bounds how uneven it may get.
+        #expect(abs((height - art) / 2 - side) <= 8, "clearance too uneven at \(height)pt")
+    }
+}
+
+/// Now Playing ends in a full-height album art square rather than a footer row, so it
+/// takes symmetric vertical insets — and tighter ones, since on a notched Mac that
+/// padding is the only thing bounding the cover's size.
+@Test func contentInsetsAreBalancedForTheFooterlessTab() {
+    let footerTotal = ExpandedNotchView.contentInset + ExpandedNotchView.bottomInset
+    #expect(ExpandedNotchView.balancedInset * 2 <= footerTotal)
+    #expect(NotchTab.allCases.filter { !$0.hasFooterRow } == [.nowPlaying])
+    let nowPlaying = ExpandedNotchView.verticalInsets(for: .nowPlaying)
+    #expect(nowPlaying.top == nowPlaying.bottom)
+    for tab in NotchTab.allCases where tab.hasFooterRow {
+        let insets = ExpandedNotchView.verticalInsets(for: tab)
+        #expect(insets.top + insets.bottom == footerTotal, "\(tab) lost its footer tuning")
+    }
+    // Tighter padding must buy a taller content box, not just move it around.
+    #expect(ExpandedNotchView.contentHeight(panelHeight: 400, tab: .nowPlaying)
+            >= ExpandedNotchView.contentHeight(panelHeight: 400, tab: .clipboard))
+}
+
 /// Liquid Glass is a macOS 26 material, so on older systems it must vanish from the
 /// picker *and* be coerced away if a persisted value still names it.
 @Test func notchMaterialAvailabilityMatchesTheOS() {
@@ -279,7 +314,7 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     for width in stride(from: 420.0, through: 900.0, by: 10.0) {
         for height in stride(from: 140.0, through: 340.0, by: 10.0) {
             let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
-            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight, tab: .nowPlaying)
             // Visualizer on is the tighter case — it's what caps the song column.
             let song = NowPlayingLayout.songColumnWidth(availableWidth: contentWidth,
                                                         availableHeight: contentHeight,
@@ -373,7 +408,7 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     for width in stride(from: 420.0, through: 900.0, by: 10.0) {
         for height in stride(from: 140.0, through: 340.0, by: 10.0) {
             let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
-            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight, tab: .nowPlaying)
             let song = NowPlayingLayout.songColumnWidth(availableWidth: contentWidth,
                                                         availableHeight: contentHeight,
                                                         hasVisualizer: true)
@@ -400,7 +435,7 @@ private func makeInfo(_ title: String) -> NowPlayingInfo {
     for width in stride(from: 420.0, through: 900.0, by: 10.0) {
         for height in stride(from: 140.0, through: 340.0, by: 10.0) {
             let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
-            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+            let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight, tab: .nowPlaying)
             let size = NowPlayingLayout.visualizerSize(availableWidth: contentWidth,
                                                        availableHeight: contentHeight)
             let region = NowPlayingLayout.visualizerRegionWidth(availableWidth: contentWidth,

@@ -181,6 +181,42 @@ public func runIsletSelfChecks() -> Int {
         check(store.expandedWidth == 640, "reset restores expandedWidth")
         check(store.clipboardLimit == 50, "reset restores clipboardLimit")
         check(store.nowPlayingEnabled, "reset restores nowPlayingEnabled")
+        // The collapsed album art lives in the real-pixel strip beside the cutout, and
+        // it must never reach the camera housing — content drawn there is invisible.
+        do {
+            let strip = NotchShape.collapsedTopRadius + NotchGeometry.sideStripWidth
+                - NotchShape.collapsedTopRadius
+            check(strip == NotchGeometry.sideStripWidth,
+                  "the art region ends exactly at the camera cutout")
+            var worstImbalance: CGFloat = 0
+            var overflowedAt: String?
+            for height in stride(from: 28.0, through: 44.0, by: 1.0) {
+                let art = CollapsedNotchView.artSize(notchHeight: height,
+                                                     sideStrip: NotchGeometry.sideStripWidth
+                                                        - NotchShape.collapsedTopRadius)
+                let side = (NotchGeometry.sideStripWidth - NotchShape.collapsedTopRadius - art) / 2
+                if art > height || side < 0 { overflowedAt = "\(height)pt notch" }
+                if side < CollapsedNotchView.artMargin - 0.001 { overflowedAt = "\(height)pt notch" }
+                worstImbalance = max(worstImbalance, abs((height - art) / 2 - side))
+            }
+            check(overflowedAt == nil,
+                  "the album art keeps its margin at every notch height\(overflowedAt.map { " (failed at \($0))" } ?? "")")
+            // The strip is narrower than the pill is tall, so a square can't have equal
+            // margins on all four sides — this pins how far off it is allowed to get.
+            check(worstImbalance <= 8,
+                  "vertical and horizontal clearance stay within 8pt (worst \(String(format: "%.1f", worstImbalance))pt)")
+        }
+
+        check(ExpandedNotchView.balancedInset * 2
+                <= ExpandedNotchView.contentInset + ExpandedNotchView.bottomInset,
+              "the footerless tab never spends more vertical padding than a footer tab")
+        check(!NotchTab.nowPlaying.hasFooterRow, "Now Playing has no footer row to tighten against")
+        check(NotchTab.allCases.filter { !$0.hasFooterRow } == [.nowPlaying],
+              "Now Playing is the only footerless tab")
+        check(ExpandedNotchView.verticalInsets(for: .nowPlaying).top
+                == ExpandedNotchView.verticalInsets(for: .nowPlaying).bottom,
+              "the album art gets equal clearance above and below")
+
         check(store.notchMaterial == .preferredDefault, "reset restores notchMaterial")
         check(NotchMaterial.available.contains(store.notchMaterial),
               "reset never leaves a material this Mac can't render")
@@ -295,7 +331,7 @@ public func runIsletSelfChecks() -> Int {
         for width in stride(from: 420.0, through: 900.0, by: 10.0) {
             for height in stride(from: 140.0, through: 340.0, by: 10.0) {
                 let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
-                let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+                let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight, tab: .nowPlaying)
                 // Visualizer on is the tighter case — it's what shrinks the song
                 // column to its share — so the guard only has to sweep that one.
                 let song = NowPlayingLayout.songColumnWidth(availableWidth: contentWidth,
@@ -336,7 +372,7 @@ public func runIsletSelfChecks() -> Int {
         for width in stride(from: 420.0, through: 900.0, by: 10.0) {
             for height in stride(from: 140.0, through: 340.0, by: 10.0) {
                 let contentWidth = ExpandedNotchView.contentWidth(panelWidth: CGFloat(width))
-                let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight)
+                let contentHeight = ExpandedNotchView.contentHeight(panelHeight: CGFloat(height) + notchHeight, tab: .nowPlaying)
                 let song = NowPlayingLayout.songColumnWidth(availableWidth: contentWidth,
                                                             availableHeight: contentHeight,
                                                             hasVisualizer: true)

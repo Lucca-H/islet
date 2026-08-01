@@ -153,7 +153,7 @@ private struct AudioVisualizerSettingsRow: View {
             }
         ))
 
-        Text("Replaces the collapsed notch's audio bars with a live frequency visualizer of whatever's actually playing, instead of a decorative animation. This is also the only way Islet can tell that **browser audio** is playing, since Now Playing can't see browsers.\n\nRequires granting **Screen & System Audio Recording** — the same permission Zoom or OBS use — even though only the audio channel is ever read. macOS keeps its screen-recording indicator up for as long as this is switched on.")
+        Text("Replaces the collapsed notch's audio bars with a live frequency visualizer of the track that's actually playing, instead of a decorative animation. Capture is scoped to Music or Spotify, so audio from a browser or another app won't bleed into the bars.\n\nRequires granting **Screen & System Audio Recording** — the same permission Zoom or OBS use — even though only the audio channel is ever read. macOS keeps its screen-recording indicator up for as long as this is switched on.")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

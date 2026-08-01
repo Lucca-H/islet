@@ -3,6 +3,71 @@
 All notable changes to Islet are documented here. This project follows
 [Semantic Versioning](https://semver.org) and [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.0-beta.8] — 2026-07-31
+
+### Fixed
+- **The click shield absorbed nothing at all.** It was a transparent window whose view
+  drew nothing, and AppKit hit-tests windows against rendered alpha rather than their
+  frame — fully transparent pixels aren't just invisible, they're absent to the event
+  system, so every click fell straight through to the app underneath. The shield now
+  paints at 1/255 alpha, the lowest value that survives the 8-bit backing store. The
+  mouse-up deferral and `acceptsFirstMouse` work from beta.6 were both correct and both
+  unreachable behind this.
+- **Its safety-net timeout couldn't fire when it was needed.** The 1s timer that
+  releases a stuck shield was scheduled in the default run-loop mode, but a click held
+  long enough to need it has put the run loop in event-tracking mode. Added in
+  `.common` instead.
+- **The visualizer showed audio from other apps.** `SCStream` captures the whole system
+  mix, so a video playing in a browser over Spotify was summed into the same FFT and the
+  bars described both at once — next to a track title that only referred to one of them.
+  Capture is now scoped by `SCContentFilter` to the app Now Playing has resolved, and
+  the stream restarts when that changes (a filter is fixed for a stream's lifetime). If
+  the player isn't in `SCShareableContent` — it only lists apps with on-screen windows,
+  so a minimized player can be missing — it falls back to the system mix rather than
+  going dark.
+- **The collapsed pill's album art was jammed against the pill's edge.** Two causes.
+  `NotchShape` flares its top shoulders *outward*, so the pill's straight body edge sits
+  8pt inside the frame — the art's 10pt leading padding was therefore buying 2pt of
+  visible margin. And the art was sized off the pill's *height* when the binding
+  constraint is the strip of real pixels beside the camera cutout: on a 16" that
+  produced a 23.6pt cover with ~2pt either side against 7.2pt above and below. The art
+  is now centred in that strip and bounded by it, so its left and right margins are
+  equal by construction. A square in a box narrower than it is tall can't have four
+  equal margins, so the checks bound the remaining imbalance rather than pretending it
+  can be tuned away.
+- **The expanded panel's album art sat visibly off-centre.** The panel's tighter bottom
+  inset exists because "every tab ends in a footer row" — true of Shelf, Clipboard and
+  Quick Note, but not of Now Playing, which is the one tab whose content is a square
+  sized to fill the content box's full height. Its only breathing room was therefore the
+  panel inset itself: 22pt above the cover and 10pt below it. Footerless tabs now take a
+  symmetric inset instead. `ExpandedNotchView.contentHeight` is consequently
+  tab-dependent, and the checks assert the footerless tab never spends *more* vertical
+  padding than a footer tab rather than that the two match.
+
+### Changed
+- **The collapsed pill's album art is ~21% larger** (19.8pt → 24pt). Both of its bounds
+  had to move: the strip of real pixels beside the cutout went 36pt → 40pt, and the
+  height share went 0.62 → 0.75, since on a 32pt notch the height term was the binding
+  one and widening the strip alone would have bought nothing there. Its clearance comes
+  out even on all four sides on a 32pt notch, rather than 4pt against 6pt. On a physical
+  notch this widens the collapsed pill itself by 8pt, since the pill is the cutout plus
+  two strips — that's the actual cost of a bigger peek. Notchless displays are unchanged
+  in width.
+- **The expanded album art is larger** — about 12% on a notchless display and 4% on a
+  notched one. Two different limits were binding. Its width cap was a flat fraction of
+  the song column, and because a fraction applies uniformly it had to be set by the
+  narrowest panel the sliders allow, leaving the art short of the space actually going
+  spare at every other size; the metadata column's minimum width is now enforced
+  directly, so the art can take exactly what's left and the fraction is just taste on
+  top. On a notched Mac the art is bound by panel *height* instead — it already equalled
+  the content box exactly — so the footerless tab's vertical inset is tighter as well,
+  trading padding for cover. The rest of the layout is unchanged: the guard still sweeps
+  every width/height combination, and the metadata column now lands exactly on its floor
+  at the tightest setting rather than by a hand-derived margin.
+- Removed the claim, from both the README and the Settings copy, that the visualizer is
+  a way to detect browser audio. Capture only ever ran while Music or Spotify was
+  playing, so it was never true; scoping the filter now makes it explicitly false.
+
 ## [0.1.0-beta.7] — 2026-07-30
 
 ### Changed
@@ -132,6 +197,7 @@ All notable changes to Islet are documented here. This project follows
   magnitudes reading flat; with gain control doing that upstream it was double-counting
   and left the ring near-saturated.
 
+[0.1.0-beta.8]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/Lucca-H/islet/releases/tag/v0.1.0-beta.6
 

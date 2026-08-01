@@ -6,6 +6,16 @@ import SwiftUI
 /// bottom two corners curve inward, and the top-left/top-right "shoulders" flare
 /// outward with a small inverse radius — the signature notch silhouette.
 struct NotchShape: Shape {
+    /// Shoulder radius for each state.
+    ///
+    /// Not just styling: because the shoulders flare *outward*, the pill's straight
+    /// left and right body edges sit `topRadius` points inside the frame. Content
+    /// padded from the frame edge is therefore that much closer to the visible edge
+    /// than its padding suggests — so anything laying out against the pill's sides
+    /// has to start from here, not from zero.
+    static let collapsedTopRadius: CGFloat = 8
+    static let expandedTopRadius: CGFloat = 12
+
     var bottomRadius: CGFloat
     var topRadius: CGFloat
 

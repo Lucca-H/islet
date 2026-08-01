@@ -94,7 +94,8 @@ struct NotchRootView: View {
     /// using one `Shape` value (rather than three separately-constructed ones) keeps
     /// their corner-radius interpolation in lockstep during the expand animation.
     private var shape: NotchShape {
-        NotchShape(bottomRadius: CGFloat(settings.cornerRadius), topRadius: vm.isExpanded ? 12 : 8)
+        NotchShape(bottomRadius: CGFloat(settings.cornerRadius),
+                   topRadius: vm.isExpanded ? NotchShape.expandedTopRadius : NotchShape.collapsedTopRadius)
     }
 
     /// The notch always reads as solid black while collapsed or peeking — matching
@@ -192,7 +193,7 @@ struct NotchRootView: View {
                     .transition(.opacity)
             }
         case .collapsed:
-            CollapsedNotchView(notchSize: currentSize)
+            CollapsedNotchView(notchSize: currentSize, sideStrip: geometry.collapsedSideStrip)
                 .environmentObject(vm)
                 .environmentObject(settings)
                 .frame(width: currentSize.width, height: currentSize.height)
@@ -204,10 +205,46 @@ struct NotchRootView: View {
 
 /// Compact state: optional album-art peek on the left, a live audio indicator on
 /// the right when something is playing.
-private struct CollapsedNotchView: View {
+struct CollapsedNotchView: View {
     let notchSize: CGSize
+    /// Real, displayable width beside the camera cutout, measured from the pill's
+    /// body edge. The album art's binding constraint — see `artSize`.
+    let sideStrip: CGFloat
     @EnvironmentObject var vm: NotchViewModel
     @EnvironmentObject var settings: SettingsStore
+
+    /// Clearance held either side of the album art.
+    ///
+    /// Kept deliberately small because it trades directly against the cover's size and
+    /// buys nothing else: the strip is narrower than the pill is tall, so the vertical
+    /// gap exceeds the horizontal one by a fixed amount *whatever* this is (5pt on a
+    /// 16", 2pt on a 14"). Since the imbalance can't be tuned away, the only thing left
+    /// to optimise is keeping the cover as large as it can be while the margin still
+    /// reads as intentional.
+    static let artMargin: CGFloat = 4
+
+    /// The art is a square in a box that is *wider-constrained than it is tall*, so
+    /// its size has to come from the strip, not from the pill's height.
+    ///
+    /// Sizing it purely off height (it was `height * 0.62`) ignored that: on a 16"
+    /// the cover came out 23.6pt inside a 28pt strip, leaving ~2pt either side against
+    /// 7.2pt above and below. Bounding it by the strip too keeps the four margins in
+    /// the same range, and the height term still shrinks it on a shorter notch rather
+    /// than letting it touch the pill's top and bottom edges.
+    private var artSize: CGFloat { Self.artSize(notchHeight: notchSize.height, sideStrip: sideStrip) }
+
+    /// Share of the pill's height the cover may take.
+    ///
+    /// Raised alongside the strip: at 0.62 the height term was the binding one on a
+    /// 32pt notch, so widening the strip alone would have bought nothing there. It's
+    /// still a real bound on shorter notches, where it keeps the cover off the pill's
+    /// top and bottom edges.
+    static let artHeightFraction: CGFloat = 0.75
+
+    /// Static so the layout check measures the same square the view draws.
+    static func artSize(notchHeight: CGFloat, sideStrip: CGFloat) -> CGFloat {
+        min(notchHeight * artHeightFraction, sideStrip - artMargin * 2)
+    }
 
     /// Islet tracks Apple Music and Spotify only, so playback state comes purely
     /// from track metadata — no inferring "something is making noise" from raw
@@ -220,9 +257,15 @@ private struct CollapsedNotchView: View {
         HStack(spacing: 0) {
             if settings.peekMediaArt, isPlaying {
                 artwork
-                    .frame(width: notchSize.height * 0.62, height: notchSize.height * 0.62)
+                    .frame(width: artSize, height: artSize)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .padding(.leading, 10)
+                    // Centred in the strip rather than given a literal leading pad, so
+                    // the left and right margins are equal by construction. The pad
+                    // that was here measured from the frame's edge, but the shoulders
+                    // flare outward — the pill's body edge is `collapsedTopRadius`
+                    // inside it, so 10pt of padding was buying 2pt of visible margin.
+                    .frame(width: sideStrip, alignment: .center)
+                    .padding(.leading, NotchShape.collapsedTopRadius)
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
             Spacer(minLength: 0)

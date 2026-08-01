@@ -25,7 +25,29 @@ struct NotchGeometry {
     ///
     /// Shared by `NotchRootView` (what's drawn) and `NotchController` (what's
     /// hoverable) so the visible pill and its hit region always agree.
-    var contentSafeMargin: CGFloat { hasPhysicalNotch ? 36 : 0 }
+    var contentSafeMargin: CGFloat { hasPhysicalNotch ? Self.sideStripWidth : 0 }
+
+    /// How wide that flanking margin is where it exists.
+    ///
+    /// Also sets how much room the collapsed album art has, which is what drives its
+    /// value: the art is bounded by this strip, not by the pill's height, so the strip
+    /// has to be wide enough for a cover that reads as a cover. On a physical notch
+    /// this widens the collapsed pill by the same amount — the pill is the cutout plus
+    /// two strips — which is the real cost of a larger peek.
+    static let sideStripWidth: CGFloat = 40
+
+    /// The strip collapsed content actually gets on each side: the flanking margin,
+    /// less the outward shoulder flare that puts the pill's straight body edge inside
+    /// the frame. This — not the pill's height — is what really bounds the album-art
+    /// peek, and it's noticeably tighter: 28pt against a notch 32–38pt tall.
+    ///
+    /// Deliberately the same on a virtual notch. There's no camera housing to dodge
+    /// there, so any value would be safe, but matching the physical case keeps the
+    /// collapsed pill looking identical across machines rather than sprouting a much
+    /// bigger cover on notchless displays.
+    var collapsedSideStrip: CGFloat {
+        Self.sideStripWidth - NotchShape.collapsedTopRadius
+    }
 
     /// The collapsed pill's rendered width — the true cutout plus a safe margin on
     /// each side, so collapsed-state content never lands inside the dead zone.

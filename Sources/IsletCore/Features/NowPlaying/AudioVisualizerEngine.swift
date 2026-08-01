@@ -57,6 +57,28 @@ final class AudioVisualizerEngine: ObservableObject {
     private var lastBufferAt: Date?
     private let streamDelegate = StreamDelegate()
 
+    /// Bundle identifier of the player whose audio the visualizer should follow, or
+    /// `nil` to visualize everything the machine is outputting.
+    ///
+    /// `SCStream` captures the whole system mix by default, so a YouTube tab playing
+    /// over Spotify was summed into the same FFT and the bars showed both — the
+    /// visualizer sat next to a Spotify track title while partly describing a browser.
+    /// Scoping the content filter to the app Now Playing has actually resolved makes
+    /// the ring describe the song it's displayed beside.
+    private(set) var captureBundleIdentifier: String?
+
+    /// Point capture at one app's audio, restarting the stream if that changes while
+    /// running — an `SCContentFilter` is fixed for the life of a stream, so switching
+    /// from Spotify to Music can't be applied in place.
+    func setCaptureSource(bundleIdentifier: String?) {
+        guard captureBundleIdentifier != bundleIdentifier else { return }
+        captureBundleIdentifier = bundleIdentifier
+        recordDebug("capture source -> \(bundleIdentifier ?? "(entire system)")")
+        guard isCapturing || isStarting else { return }
+        stop()
+        start()
+    }
+
     /// Mirrors engine state into `UserDefaults` so it can be inspected from a
     /// terminal (`defaults read com.dynamicisland.islet visualizerDebugStatus`).
     /// `os_log` isn't readable back without extra permissions on this setup, and a
@@ -135,6 +157,24 @@ final class AudioVisualizerEngine: ObservableObject {
         NSApp.terminate(nil)
     }
 
+    /// Build the capture filter, scoped to a single app's audio when one is named
+    /// and actually visible to ScreenCaptureKit.
+    ///
+    /// Falls back to the whole display rather than failing: `SCShareableContent` only
+    /// lists apps with on-screen windows, so a player minimized to the menu bar or
+    /// sitting on another Space can legitimately be missing from it. A visualizer
+    /// showing the system mix is a far better outcome there than one showing nothing.
+    nonisolated static func contentFilter(display: SCDisplay,
+                                          applications: [SCRunningApplication],
+                                          bundleIdentifier: String?) -> SCContentFilter {
+        guard let bundleIdentifier,
+              let app = applications.first(where: { $0.bundleIdentifier == bundleIdentifier })
+        else {
+            return SCContentFilter(display: display, excludingWindows: [])
+        }
+        return SCContentFilter(display: display, including: [app], exceptingWindows: [])
+    }
+
     func start() {
         // Only *request* (which prompts and registers Islet with TCC) once per run;
         // preflight is enough afterwards. The Settings toggle's onChange also calls
@@ -178,7 +218,9 @@ final class AudioVisualizerEngine: ObservableObject {
                     return
                 }
 
-                let filter = SCContentFilter(display: display, excludingWindows: [])
+                let filter = Self.contentFilter(display: display,
+                                                applications: content.applications,
+                                                bundleIdentifier: self.captureBundleIdentifier)
                 let config = SCStreamConfiguration()
                 config.capturesAudio = true
                 config.excludesCurrentProcessAudio = false

@@ -38,7 +38,8 @@ tab strip entirely.
   streams, some local files — hide the bar rather than show an empty one, and it
   degrades to a bare bar (then to nothing) on panels too short to fit the timestamps.
 - An optional **circular spectrum visualizer** on the right, driven by a real 96-band
-  FFT of the audio actually playing (Settings → Notch → Audio visualizer). Levels are
+  FFT of the player's own audio — capture is scoped to Music or Spotify, so a video in
+  a browser won't show up in the bars (Settings → Notch → Audio visualizer). Levels are
   gain-normalized against a rolling reference, so the bars react to the *music* rather
   than to how loud you happen to have the volume turned up — including the player's own
   internal volume slider.
@@ -56,8 +57,9 @@ tab strip entirely.
 > identical code returns full data from Apple's own `swift-frontend` and an empty
 > dictionary from an ad-hoc-signed app bundle. Rather than ship a private-API
 > dependency that can never fire for a third-party build, Islet doesn't attempt it.
-> Turning the audio visualizer on is the one way Islet can tell that browser audio is
-> playing at all, since it listens to the output device rather than to Now Playing.
+> The audio visualizer doesn't work around this either: its capture is scoped to the
+> player Now Playing has resolved, so a browser playing over Spotify won't bleed into
+> the bars.
 
 ### 🗂 Drop Shelf
 - Drag any file onto the notch to stash it on a temporary shelf.

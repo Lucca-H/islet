@@ -25,6 +25,22 @@ final class ClickShieldWindow: NSPanel {
         /// this the shield's whole reason to exist is unreliable.
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+        /// The shield has to actually *paint* something to receive clicks at all.
+        ///
+        /// AppKit hit-tests windows against their rendered alpha, not their frame: a
+        /// region whose pixels are fully transparent isn't merely invisible, it's
+        /// absent as far as the event system is concerned, and clicks fall straight
+        /// through to the app below. A clear `backgroundColor` on a view that draws
+        /// nothing is exactly that case — which is why the shield appeared to do
+        /// nothing at all rather than misbehaving in some subtler way.
+        ///
+        /// One part in 255 is the smallest alpha that survives the 8-bit backing
+        /// store; anything lower quantizes back to zero and reinstates the bug.
+        override func draw(_ dirtyRect: NSRect) {
+            NSColor.black.withAlphaComponent(1.0 / 255.0).setFill()
+            dirtyRect.fill()
+        }
+
         override func mouseDown(with event: NSEvent) { onClick?() }
         override func rightMouseDown(with event: NSEvent) { onClick?() }
         override func otherMouseDown(with event: NSEvent) { onClick?() }
@@ -81,9 +97,15 @@ final class ClickShieldWindow: NSPanel {
         isConsumingClick = true
         hideDeferred = false
         consumeTimeout?.invalidate()
-        consumeTimeout = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
+        // Added in `.common` rather than via `scheduledTimer`: the whole point of this
+        // timeout is to fire during a click the shield is still holding, and a click
+        // held long enough to need it has put the run loop in event-tracking mode,
+        // where a default-mode timer doesn't run.
+        let timer = Timer(timeInterval: 1.0, repeats: false) { [weak self] _ in
             DispatchQueue.main.async { self?.endConsumingClick() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        consumeTimeout = timer
     }
 
     private func endConsumingClick() {
