@@ -8,12 +8,19 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-14
+    # Must be macos-26 or newer: Islet *deploys* to macOS 13 but *builds* against the
+    # macOS 26 SDK, because `NSGlassEffectView` is compiled in and switched on at
+    # runtime. On macos-14 the Build step fails outright — the type doesn't exist in
+    # that SDK — which is exactly what it did until this was corrected.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show Swift version
-        run: swift --version
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
 
       - name: Build
         run: swift build -v
@@ -26,6 +33,19 @@ jobs:
 
       - name: Assemble app bundle
         run: ./scripts/build_app.sh release
+
+      # Islet's macOS 13 support can't be exercised on a macOS 26 runner, but the one
+      # thing that would silently undo it — a macOS 26 type escaping into a signature
+      # or property, which raises the deployment target regardless of any #available
+      # guard around its use — does show up here, in the linked binary's minimum.
+      - name: Verify deployment target is still macOS 13
+        run: |
+          MINOS=$(otool -l build/Islet.app/Contents/MacOS/Islet \
+                  | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+          PLIST=$(plutil -extract LSMinimumSystemVersion raw build/Islet.app/Contents/Info.plist)
+          echo "linked minos=$MINOS  LSMinimumSystemVersion=$PLIST"
+          [ "$MINOS" = "13.0" ] || { echo "::error::linked deployment target is $MINOS, expected 13.0"; exit 1; }
+          [ "$PLIST" = "13.0" ] || { echo "::error::LSMinimumSystemVersion is $PLIST, expected 13.0"; exit 1; }
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4

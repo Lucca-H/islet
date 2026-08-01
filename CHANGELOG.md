@@ -5,7 +5,24 @@ All notable changes to Islet are documented here. This project follows
 
 ## [0.1.0-beta.8] — 2026-07-31
 
+### Added
+- **CI asserts the linked deployment target is still macOS 13.** macOS 13 support can't
+  be exercised on a macOS 26 runner, but the one mistake that would silently undo it —
+  a macOS 26 type escaping into a signature or stored property, which raises the target
+  regardless of any `#available` guard around its use — shows up in the linked binary's
+  minimum, which CI can read.
+
 ### Fixed
+- **CI and the release workflow were both broken, and had been since before beta.7.**
+  They ran on `macos-14`, which has no macOS 26 SDK, so the Build step failed on
+  `NSGlassEffectView` and every step after it was skipped — including the one that
+  publishes the GitHub release, which is why neither beta.7 nor beta.8 ever appeared.
+  Both now run on `macos-26`. Lowering the *deployment* target to 13 in beta.7 didn't
+  help here and was never going to: Islet still builds against the 26 SDK and switches
+  the glass on at runtime.
+- Release notes are now taken from the matching `CHANGELOG.md` section instead of an
+  auto-generated commit list, falling back to the generated notes if a tag is pushed
+  ahead of its entry.
 - **The click shield absorbed nothing at all.** It was a transparent window whose view
   drew nothing, and AppKit hit-tests windows against rendered alpha rather than their
   frame — fully transparent pixels aren't just invisible, they're absent to the event

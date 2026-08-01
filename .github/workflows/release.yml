@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
+    # See ci.yml — building needs the macOS 26 SDK even though Islet deploys to 13.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -19,11 +20,53 @@ jobs:
           swift test
           ./scripts/make_release.sh
 
+      - name: Verify deployment target is still macOS 13
+        run: |
+          MINOS=$(otool -l build/Islet.app/Contents/MacOS/Islet \
+                  | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+          [ "$MINOS" = "13.0" ] || { echo "::error::linked deployment target is $MINOS, expected 13.0"; exit 1; }
+
+      # Prefer the hand-written changelog entry over an auto-generated commit list.
+      # Falls back to the generated notes if the tag has no matching section, so a tag
+      # pushed ahead of its changelog entry still publishes rather than shipping blank.
+      - name: Build release notes
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA=$(awk '{print $1}' build/dist/SHA256SUMS.txt)
+          awk -v v="## [$VERSION]" 'index($0, v)==1{f=1; next} /^## \[/{f=0} f' CHANGELOG.md > section.md
+          if [ "$(grep -c . section.md)" -eq 0 ]; then
+            echo "no changelog section for $VERSION — falling back to generated notes"
+            echo "generate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "generate=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "**Requires macOS 13 (Ventura) or later.** Liquid Glass needs macOS 26;"
+            echo "on Ventura through Sequoia the notch renders Solid and everything else is identical."
+            echo
+            echo "### Install"
+            echo "Unzip and move **Islet.app** to \`/Applications\`. The build is ad-hoc signed and"
+            echo "**not notarized**, so right-click → **Open** the first time, or run:"
+            echo '```bash'
+            echo 'xattr -dr com.apple.quarantine /Applications/Islet.app'
+            echo '```'
+            echo
+            echo '```'
+            echo "SHA-256  $SHA  Islet.app.zip"
+            echo '```'
+            echo
+            echo "---"
+            echo
+            cat section.md
+          } > release-notes.md
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
-          generate_release_notes: true
+          body_path: release-notes.md
+          generate_release_notes: ${{ steps.notes.outputs.generate }}
           files: |
             build/dist/Islet.app.zip
             build/dist/SHA256SUMS.txt
