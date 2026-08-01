@@ -12,7 +12,7 @@ jobs:
     # See ci.yml — building needs the macOS 26 SDK even though Islet deploys to 13.
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build, test, package
         run: |
@@ -61,12 +61,27 @@ jobs:
             cat section.md
           } > release-notes.md
 
+      # Published with `gh` (preinstalled on runners) rather than an action, because
+      # the action retries failures internally and reports only "Too many retries" —
+      # which hides the status code that says *why*, and a 403 from a token capped by
+      # the repository's workflow-permissions setting looks identical to a flaky API.
+      # `gh` fails on the first response and prints it.
       - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
-          body_path: release-notes.md
-          generate_release_notes: ${{ steps.notes.outputs.generate }}
-          files: |
-            build/dist/Islet.app.zip
-            build/dist/SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Surface what the token can actually do before attempting the write, so a
+          # permission cap is legible even if the create call's error is terse.
+          gh api "repos/$GITHUB_REPOSITORY" --jq '"token repo permissions: \(.permissions)"' || true
+
+          ARGS=(--verify-tag --title "Islet ${GITHUB_REF_NAME#v}")
+          case "$GITHUB_REF_NAME" in
+            *alpha*|*beta*|*rc*) ARGS+=(--prerelease) ;;
+          esac
+          if [ "${{ steps.notes.outputs.generate }}" = "true" ]; then
+            ARGS+=(--generate-notes)
+          else
+            ARGS+=(--notes-file release-notes.md)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            build/dist/Islet.app.zip build/dist/SHA256SUMS.txt "${ARGS[@]}"

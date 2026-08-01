@@ -14,7 +14,7 @@ jobs:
     # that SDK — which is exactly what it did until this was corrected.
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Show toolchain
         run: |
